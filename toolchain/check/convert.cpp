@@ -516,6 +516,8 @@ static bool IsValidExpressionCategoryForConversionTarget(
              category == SemIR::ExpressionCategory::DurableReference ||
              category == SemIR::ExpressionCategory::EphemeralReference ||
              category == SemIR::ExpressionCategory::Initializing;
+    case ConversionTarget::ExplicitAs:
+      return true;
     case ConversionTarget::Initializer:
     case ConversionTarget::FullInitializer:
       return category == SemIR::ExpressionCategory::Initializing;
@@ -561,10 +563,29 @@ static auto PerformBuiltinConversion(Context& context, Parse::Node parse_node,
   // If the value is already of the right kind and expression category, there's
   // nothing to do. Performing a conversion would decompose and rebuild tuples
   // and structs, so it's important that we bail out early in this case.
-  if (value_type_id == target.type_id &&
-      IsValidExpressionCategoryForConversionTarget(
-          SemIR::GetExpressionCategory(sem_ir, value_id), target.kind)) {
-    return value_id;
+  if (value_type_id == target.type_id) {
+    auto value_cat = SemIR::GetExpressionCategory(sem_ir, value_id);
+    if (IsValidExpressionCategoryForConversionTarget(value_cat, target.kind)) {
+      return value_id;
+    }
+
+    // If the source is an initializing expression, we may be able to pull a
+    // value right out of it.
+    if (value_cat == SemIR::ExpressionCategory::Initializing &&
+        IsValidExpressionCategoryForConversionTarget(
+            SemIR::ExpressionCategory::Value, target.kind) &&
+        SemIR::GetInitializingRepresentation(sem_ir, value_type_id).kind ==
+            SemIR::InitializingRepresentation::ByCopy) {
+      auto value_rep = SemIR::GetValueRepresentation(sem_ir, value_type_id);
+      if (value_rep.kind == SemIR::ValueRepresentation::Copy &&
+          value_rep.type_id == value_type_id) {
+        // The initializer produces an object representation by copy, and the
+        // value representation is a copy of the object representation, so we
+        // already have a value of the right form.
+        return context.AddNode(
+            SemIR::ValueOfInitializer{parse_node, value_type_id, value_id});
+      }
+    }
   }
 
   // A tuple (T1, T2, ..., Tn) converts to (U1, U2, ..., Un) if each Ti
@@ -632,6 +653,36 @@ static auto PerformBuiltinConversion(Context& context, Parse::Node parse_node,
   return value_id;
 }
 
+// Given a value expression, form a corresponding initializer that copies from
+// that value, if it is possible to do so.
+static auto PerformCopy(Context& context, SemIR::NodeId expr_id)
+    -> SemIR::NodeId {
+  auto expr = context.nodes().Get(expr_id);
+  auto type_id = expr.type_id();
+  if (type_id == SemIR::TypeId::Error) {
+    return SemIR::NodeId::BuiltinError;
+  }
+
+  // TODO: Directly track on the value representation whether it's a copy of
+  // the object representation.
+  auto value_rep = SemIR::GetValueRepresentation(context.sem_ir(), type_id);
+  if (value_rep.kind == SemIR::ValueRepresentation::Copy &&
+      value_rep.aggregate_kind == SemIR::ValueRepresentation::NotAggregate &&
+      value_rep.type_id == type_id) {
+    // For by-value scalar types, no explicit action is required. Initializing
+    // from a value expression is treated as copying the value.
+    return expr_id;
+  }
+
+  // TODO: We don't yet have rules for whether and when a class type is
+  // copyable, or how to perform the copy.
+  CARBON_DIAGNOSTIC(CopyOfUncopyableType, Error,
+                    "Cannot copy value of type `{0}`.", std::string);
+  context.emitter().Emit(expr.parse_node(), CopyOfUncopyableType,
+                         context.sem_ir().StringifyType(type_id));
+  return SemIR::NodeId::BuiltinError;
+}
+
 auto Convert(Context& context, Parse::Node parse_node, SemIR::NodeId expr_id,
              ConversionTarget target) -> SemIR::NodeId {
   auto& sem_ir = context.sem_ir();
@@ -684,18 +735,31 @@ auto Convert(Context& context, Parse::Node parse_node, SemIR::NodeId expr_id,
   }
 
   // If the types don't match at this point, we can't perform the conversion.
-  // TODO: Look for an ImplicitAs impl.
+  // TODO: Look for an `ImplicitAs` impl, or an `As` impl in the case where
+  // `target.kind == ConversionTarget::ExplicitAs`.
   SemIR::Node expr = sem_ir.nodes().Get(expr_id);
   if (expr.type_id() != target.type_id) {
     CARBON_DIAGNOSTIC(ImplicitAsConversionFailure, Error,
                       "Cannot implicitly convert from `{0}` to `{1}`.",
                       std::string, std::string);
+    CARBON_DIAGNOSTIC(ExplicitAsConversionFailure, Error,
+                      "Cannot convert from `{0}` to `{1}` with `as`.",
+                      std::string, std::string);
     context.emitter()
-        .Build(parse_node, ImplicitAsConversionFailure,
+        .Build(parse_node,
+               target.kind == ConversionTarget::ExplicitAs
+                   ? ExplicitAsConversionFailure
+                   : ImplicitAsConversionFailure,
                sem_ir.StringifyType(expr.type_id()),
                sem_ir.StringifyType(target.type_id))
         .Emit();
     return SemIR::NodeId::BuiltinError;
+  }
+
+  // For `as`, don't perform any value category conversions. In particular, an
+  // identity conversion shouldn't change the expression category.
+  if (target.kind == ConversionTarget::ExplicitAs) {
+    return expr_id;
   }
 
   // Now perform any necessary value category conversions.
@@ -730,18 +794,25 @@ auto Convert(Context& context, Parse::Node parse_node, SemIR::NodeId expr_id,
       [[fallthrough]];
 
     case SemIR::ExpressionCategory::DurableReference:
-    case SemIR::ExpressionCategory::EphemeralReference: {
-      // If we have a reference and don't want one, form a value binding.
-      if (target.kind != ConversionTarget::ValueOrReference &&
-          target.kind != ConversionTarget::Discarded) {
-        // TODO: Support types with custom value representations.
-        expr_id = context.AddNode(
-            SemIR::BindValue{expr.parse_node(), expr.type_id(), expr_id});
+    case SemIR::ExpressionCategory::EphemeralReference:
+      // If a reference expression is an acceptable result, we're done.
+      if (target.kind == ConversionTarget::ValueOrReference ||
+          target.kind == ConversionTarget::Discarded) {
+        break;
       }
-      break;
-    }
+
+      // If we have a reference and don't want one, form a value binding.
+      // TODO: Support types with custom value representations.
+      expr_id = context.AddNode(
+          SemIR::BindValue{expr.parse_node(), expr.type_id(), expr_id});
+      // We now have a value expression.
+      [[fallthrough]];
 
     case SemIR::ExpressionCategory::Value:
+      // When initializing from a value, perform a copy.
+      if (target.is_initializer()) {
+        expr_id = PerformCopy(context, expr_id);
+      }
       break;
   }
 
@@ -800,6 +871,69 @@ auto ConvertToBoolValue(Context& context, Parse::Node parse_node,
       context.GetBuiltinType(SemIR::BuiltinKind::BoolType));
 }
 
+auto ConvertForExplicitAs(Context& context, Parse::Node as_node,
+                          SemIR::NodeId value_id, SemIR::TypeId type_id)
+    -> SemIR::NodeId {
+  return Convert(context, as_node, value_id,
+                 {.kind = ConversionTarget::ExplicitAs, .type_id = type_id});
+}
+
+CARBON_DIAGNOSTIC(InCallToFunction, Note, "Calling function declared here.");
+
+// Convert the object argument in a method call to match the `self` parameter.
+static auto ConvertSelf(Context& context, Parse::Node call_parse_node,
+                        Parse::Node callee_parse_node,
+                        SemIR::SelfParameter self_param, SemIR::NodeId self_id)
+    -> SemIR::NodeId {
+  if (!self_id.is_valid()) {
+    CARBON_DIAGNOSTIC(MissingObjectInMethodCall, Error,
+                      "Missing object argument in method call.");
+    context.emitter()
+        .Build(call_parse_node, MissingObjectInMethodCall)
+        .Note(callee_parse_node, InCallToFunction)
+        .Emit();
+    return SemIR::NodeId::BuiltinError;
+  }
+
+  DiagnosticAnnotationScope annotate_diagnostics(
+      &context.emitter(), [&](auto& builder) {
+        CARBON_DIAGNOSTIC(
+            InCallToFunctionSelf, Note,
+            "Initializing `{0}` parameter of method declared here.",
+            llvm::StringLiteral);
+        builder.Note(self_param.parse_node, InCallToFunctionSelf,
+                     self_param.is_addr_self.index
+                         ? llvm::StringLiteral("addr self")
+                         : llvm::StringLiteral("self"));
+      });
+
+  // For `addr self`, take the address of the object argument.
+  auto self_or_addr_id = self_id;
+  if (self_param.is_addr_self.index) {
+    self_or_addr_id =
+        ConvertToValueOrReferenceExpression(context, self_or_addr_id);
+    auto self = context.nodes().Get(self_or_addr_id);
+    switch (SemIR::GetExpressionCategory(context.sem_ir(), self_id)) {
+      case SemIR::ExpressionCategory::Error:
+      case SemIR::ExpressionCategory::DurableReference:
+      case SemIR::ExpressionCategory::EphemeralReference:
+        break;
+      default:
+        CARBON_DIAGNOSTIC(AddrSelfIsNonReference, Error,
+                          "`addr self` method cannot be invoked on a value.");
+        context.emitter().Emit(call_parse_node, AddrSelfIsNonReference);
+        return SemIR::NodeId::BuiltinError;
+    }
+    self_or_addr_id = context.AddNode(SemIR::AddressOf{
+        self.parse_node(),
+        context.GetPointerType(self.parse_node(), self.type_id()),
+        self_or_addr_id});
+  }
+
+  return ConvertToValueOfType(context, call_parse_node, self_or_addr_id,
+                              self_param.type_id);
+}
+
 auto ConvertCallArgs(Context& context, Parse::Node call_parse_node,
                      SemIR::NodeId self_id,
                      llvm::ArrayRef<SemIR::NodeId> arg_refs,
@@ -810,8 +944,6 @@ auto ConvertCallArgs(Context& context, Parse::Node call_parse_node,
   auto implicit_param_refs =
       context.sem_ir().node_blocks().Get(implicit_param_refs_id);
   auto param_refs = context.sem_ir().node_blocks().Get(param_refs_id);
-
-  CARBON_DIAGNOSTIC(InCallToFunction, Note, "Calling function declared here.");
 
   // If sizes mismatch, fail early.
   if (arg_refs.size() != param_refs.size()) {
@@ -836,27 +968,8 @@ auto ConvertCallArgs(Context& context, Parse::Node call_parse_node,
   for (auto implicit_param_id : implicit_param_refs) {
     auto param = context.nodes().Get(implicit_param_id);
     if (auto self_param = param.TryAs<SemIR::SelfParameter>()) {
-      if (!self_id.is_valid()) {
-        CARBON_DIAGNOSTIC(MissingObjectInMethodCall, Error,
-                          "Missing object argument in method call.");
-        context.emitter()
-            .Build(call_parse_node, MissingObjectInMethodCall)
-            .Note(callee_parse_node, InCallToFunction)
-            .Emit();
-        return SemIR::NodeBlockId::Invalid;
-      }
-
-      DiagnosticAnnotationScope annotate_diagnostics(
-          &context.emitter(), [&](auto& builder) {
-            CARBON_DIAGNOSTIC(
-                InCallToFunctionSelf, Note,
-                "Initializing self parameter of method declared here.");
-            builder.Note(self_param->parse_node, InCallToFunctionSelf);
-          });
-
-      // TODO: Handle `addr self`.
-      auto converted_self_id = ConvertToValueOfType(
-          context, call_parse_node, self_id, self_param->type_id);
+      auto converted_self_id = ConvertSelf(
+          context, call_parse_node, callee_parse_node, *self_param, self_id);
       if (converted_self_id == SemIR::NodeId::BuiltinError) {
         return SemIR::NodeBlockId::Invalid;
       }
