@@ -4,6 +4,8 @@
 
 #include "explorer/ast/statement.h"
 
+#include <vector>
+
 #include "common/check.h"
 #include "explorer/ast/declaration.h"
 #include "explorer/base/arena.h"
@@ -181,6 +183,54 @@ void Statement::PrintIndent(int indent_num_spaces,
       out.indent(indent_num_spaces) << "}";
       break;
     }
+  }
+}
+
+auto Statement::children() const -> std::vector<Nonnull<const AstNode*>> {
+  switch (kind()) {
+    case StatementKind::ExpressionStatement:
+      return {&cast<ExpressionStatement>(*this).expression()};
+    case StatementKind::Assign:
+      return {&cast<Assign>(*this).lhs(), &cast<Assign>(*this).rhs()};
+    case StatementKind::IncrementDecrement:
+      return {&cast<IncrementDecrement>(*this).argument()};
+    case StatementKind::VariableDefinition:
+      return {&cast<VariableDefinition>(*this).pattern(),
+              &cast<VariableDefinition>(*this).init()};
+    case StatementKind::If: {
+      std::vector<Nonnull<const AstNode*>> children{
+          &cast<If>(*this).condition(), &cast<If>(*this).then_block()};
+      if (cast<If>(*this).else_block().has_value()) {
+        children.push_back(*cast<If>(*this).else_block());
+      }
+      return children;
+    }
+    case StatementKind::ReturnVar:
+      return {};
+    case StatementKind::ReturnExpression:
+      return {&cast<ReturnExpression>(*this).expression()};
+    case StatementKind::Block:
+      return std::vector<Nonnull<const AstNode*>>(
+          cast<Block>(*this).statements().begin(),
+          cast<Block>(*this).statements().end());
+    case StatementKind::While:
+      return {&cast<While>(*this).condition(), &cast<While>(*this).body()};
+    case StatementKind::Break:
+      return {};
+    case StatementKind::Continue:
+      return {};
+    case StatementKind::Match: {
+      std::vector<Nonnull<const AstNode*>> children{
+          &cast<Match>(*this).expression()};
+      for (const auto& clause : cast<Match>(*this).clauses()) {
+        children.push_back(&clause.pattern());
+        children.push_back(&clause.statement());
+      }
+      return children;
+    }
+    case StatementKind::For:
+      return {&cast<For>(*this).variable_declaration(),
+              &cast<For>(*this).loop_target(), &cast<For>(*this).body()};
   }
 }
 

@@ -5,13 +5,16 @@
 #include "explorer/ast/pattern.h"
 
 #include <string>
+#include <vector>
 
 #include "common/ostream.h"
+#include "explorer/ast/ast_node.h"
 #include "explorer/ast/expression.h"
 #include "explorer/ast/impl_binding.h"
 #include "explorer/ast/value.h"
 #include "explorer/base/arena.h"
 #include "explorer/base/error_builders.h"
+#include "explorer/base/nonnull.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Casting.h"
 
@@ -108,6 +111,31 @@ void Pattern::PrintID(llvm::raw_ostream& out) const {
     case PatternKind::ExpressionPattern:
       out << "...";
       break;
+  }
+}
+
+auto Pattern::children() const -> std::vector<Nonnull<const AstNode*>> {
+  switch (kind()) {
+    case PatternKind::TuplePattern:
+      return std::vector<Nonnull<const AstNode*>>(
+          cast<TuplePattern>(*this).fields().begin(),
+          cast<TuplePattern>(*this).fields().end());
+    case PatternKind::AlternativePattern:
+      return {&cast<AlternativePattern>(*this).choice_type(),
+              &cast<AlternativePattern>(*this).arguments()};
+    case PatternKind::VarPattern:
+      return {&cast<VarPattern>(*this).pattern()};
+    case PatternKind::AddrPattern:
+      return {&cast<AddrPattern>(*this).binding()};
+    case PatternKind::BindingPattern:
+      return {&cast<BindingPattern>(*this).type()};
+    case PatternKind::ExpressionPattern:
+      return {&cast<ExpressionPattern>(*this).expression()};
+    case PatternKind::GenericBinding:
+      // TODO: might need to return more here.
+      return {&cast<GenericBinding>(*this).type()};
+    case PatternKind::AutoPattern:
+      return {};
   }
 }
 

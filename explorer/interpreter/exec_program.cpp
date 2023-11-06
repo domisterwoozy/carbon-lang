@@ -10,6 +10,7 @@
 #include "common/error.h"
 #include "common/ostream.h"
 #include "explorer/base/arena.h"
+#include "explorer/base/print_as_id.h"
 #include "explorer/base/trace_stream.h"
 #include "explorer/interpreter/interpreter.h"
 #include "explorer/interpreter/resolve_control_flow.h"
@@ -33,6 +34,20 @@ auto AnalyzeProgram(Nonnull<Arena*> arena, AST ast,
       set_file_ctx.update_source_loc(declaration->source_loc());
       if (trace_stream->is_enabled()) {
         *trace_stream << sep << *declaration;
+      }
+    }
+    if (trace_stream->is_enabled()) {
+      *trace_stream << "\n";
+    }
+  }
+
+  if (trace_stream->is_enabled()) {
+    trace_stream->Heading("parsed AST");
+    llvm::ListSeparator sep("\n\n");
+    for (auto& declaration : ast.declarations) {
+      set_file_ctx.update_source_loc(declaration->source_loc());
+      if (trace_stream->is_enabled()) {
+        *trace_stream << sep << PrintAsTree(*declaration);
       }
     }
     if (trace_stream->is_enabled()) {

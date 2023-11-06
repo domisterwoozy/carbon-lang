@@ -72,6 +72,7 @@ cc_library(
         "//common:ostream",
         "//explorer/ast",
         "//explorer/base:arena",
+        "//explorer/base:print_as_id",
         "//explorer/base:trace_stream",
         "@llvm-project//llvm:Support",
     ],

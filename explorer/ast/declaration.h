@@ -50,6 +50,10 @@ class Declaration : public AstNode {
   void Print(llvm::raw_ostream& out) const override;
   void PrintID(llvm::raw_ostream& out) const override;
 
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    return {};
+  }
+
   virtual void PrintIndent(int indent_num_spaces, llvm::raw_ostream& out) const;
 
   static auto classof(const AstNode* node) -> bool {
@@ -265,6 +269,28 @@ class CallableDeclaration : public Declaration {
 
   auto is_method() const -> bool { return self_pattern_.has_value(); }
 
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    std::vector<Nonnull<const AstNode*>> children;
+    children.reserve(deduced_parameters_.size() +
+                     (self_pattern_.has_value() ? 1 : 0) + 1 +
+                     (return_term_.type_expression().has_value() ? 1 : 0) +
+                     (body_.has_value() ? 1 : 0));
+    for (Nonnull<GenericBinding*> deduced_parameter : deduced_parameters_) {
+      children.push_back(deduced_parameter);
+    }
+    if (self_pattern_.has_value()) {
+      children.push_back(*self_pattern_);
+    }
+    children.push_back(param_pattern_);
+    if (return_term_.type_expression().has_value()) {
+      children.push_back(*return_term_.type_expression());
+    }
+    if (body_.has_value()) {
+      children.push_back(*body_);
+    }
+    return children;
+  }
+
  private:
   std::vector<Nonnull<GenericBinding*>> deduced_parameters_;
   std::optional<Nonnull<Pattern*>> self_pattern_;
@@ -430,6 +456,19 @@ class ClassDeclaration : public Declaration {
     base_type_ = base_type;
   }
 
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    std::vector<Nonnull<const AstNode*>> children;
+    children.reserve(1 + (type_params_.has_value() ? 1 : 0) + members_.size());
+    children.push_back(self_decl_);
+    if (type_params_.has_value()) {
+      children.push_back(*type_params_);
+    }
+    for (const auto& member : members_) {
+      children.push_back(member);
+    }
+    return children;
+  }
+
  private:
   DeclaredName name_;
   ClassExtensibility extensibility_;
@@ -481,6 +520,19 @@ class MixinDeclaration : public Declaration {
     return ExpressionCategory::Value;
   }
 
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    std::vector<Nonnull<const AstNode*>> children;
+    children.reserve((params_.has_value() ? 1 : 0) + 1 + members_.size());
+    if (params_.has_value()) {
+      children.push_back(*params_);
+    }
+    children.push_back(self_);
+    for (const auto& member : members_) {
+      children.push_back(member);
+    }
+    return children;
+  }
+
  private:
   DeclaredName name_;
   std::optional<Nonnull<TuplePattern*>> params_;
@@ -510,6 +562,14 @@ class MixDeclaration : public Declaration {
     mixin_value_ = mixin_value;
   }
 
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    if (mixin_.has_value()) {
+      return {*mixin_};
+    } else {
+      return {};
+    }
+  }
+
  private:
   std::optional<Nonnull<Expression*>> mixin_;
   std::optional<Nonnull<const MixinPseudoType*>> mixin_value_;
@@ -531,6 +591,10 @@ class ExtendBaseDeclaration : public Declaration {
 
   auto base_class() const -> Nonnull<const Expression*> { return base_class_; }
   auto base_class() -> Nonnull<Expression*> { return base_class_; }
+
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    return {base_class_};
+  }
 
  private:
   Nonnull<Expression*> base_class_;
@@ -578,6 +642,14 @@ class AlternativeSignature : public AstNode {
   void set_parameters_static_type(Nonnull<const Value*> type) {
     CARBON_CHECK(!parameters_static_type_.has_value());
     parameters_static_type_ = type;
+  }
+
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    if (parameters_.has_value()) {
+      return {*parameters_};
+    } else {
+      return {};
+    }
   }
 
  private:
@@ -633,6 +705,18 @@ class ChoiceDeclaration : public Declaration {
   auto FindAlternative(std::string_view name) const
       -> std::optional<const AlternativeSignature*>;
 
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    std::vector<Nonnull<const AstNode*>> children;
+    children.reserve((type_params_.has_value() ? 1 : 0) + alternatives_.size());
+    if (type_params_.has_value()) {
+      children.push_back(*type_params_);
+    }
+    for (const auto& alternative : alternatives_) {
+      children.push_back(alternative);
+    }
+    return children;
+  }
+
  private:
   DeclaredName name_;
   std::optional<Nonnull<TuplePattern*>> type_params_;
@@ -676,6 +760,16 @@ class VariableDeclaration : public Declaration {
   void set_initializer(Nonnull<Expression*> initializer) {
     CARBON_CHECK(has_initializer()) << "should not add a new initializer";
     initializer_ = initializer;
+  }
+
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    std::vector<Nonnull<const AstNode*>> children;
+    children.reserve(1 + (initializer_.has_value() ? 1 : 0));
+    children.push_back(binding_);
+    if (initializer_.has_value()) {
+      children.push_back(*initializer_);
+    }
+    return children;
   }
 
  private:
@@ -751,6 +845,20 @@ class ConstraintTypeDeclaration : public Declaration {
     constraint_type_ = constraint_type;
   }
 
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    std::vector<Nonnull<const AstNode*>> children;
+    children.reserve((params_.has_value() ? 1 : 0) + 2 + members_.size());
+    if (params_.has_value()) {
+      children.push_back(*params_);
+    }
+    children.push_back(self_type_);
+    children.push_back(self_);
+    for (const auto& member : members_) {
+      children.push_back(member);
+    }
+    return children;
+  }
+
  private:
   DeclaredName name_;
   std::optional<Nonnull<TuplePattern*>> params_;
@@ -823,6 +931,10 @@ class InterfaceExtendDeclaration : public Declaration {
   auto base() const -> const Expression* { return base_; }
   auto base() -> Expression* { return base_; }
 
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    return {base_};
+  }
+
  private:
   Nonnull<Expression*> base_;
 };
@@ -853,6 +965,10 @@ class InterfaceRequireDeclaration : public Declaration {
   auto constraint() const -> const Expression* { return constraint_; }
   auto constraint() -> Expression* { return constraint_; }
 
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    return {impl_type_, constraint_};
+  }
+
  private:
   Nonnull<Expression*> impl_type_;
   Nonnull<Expression*> constraint_;
@@ -880,6 +996,10 @@ class AssociatedConstantDeclaration : public Declaration {
 
   auto expression_category() const -> ExpressionCategory {
     return ExpressionCategory::Value;
+  }
+
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    return {binding_};
   }
 
  private:
@@ -965,6 +1085,27 @@ class ImplDeclaration : public Declaration {
     return match_first_;
   }
 
+  // Note: does not return the match first declaration to avoid circular chains
+  // of children.
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    std::vector<Nonnull<const AstNode*>> children;
+    children.reserve(deduced_parameters_.size() + 3 + members_.size() +
+                     impl_bindings_.size());
+    for (Nonnull<GenericBinding*> deduced_parameter : deduced_parameters_) {
+      children.push_back(deduced_parameter);
+    }
+    children.push_back(impl_type_);
+    children.push_back(self_decl_);
+    children.push_back(interface_);
+    for (const auto& member : members_) {
+      children.push_back(member);
+    }
+    for (const auto& impl_binding : impl_bindings_) {
+      children.push_back(impl_binding);
+    }
+    return children;
+  }
+
  private:
   ImplKind kind_;
   std::vector<Nonnull<GenericBinding*>> deduced_parameters_;
@@ -1000,6 +1141,11 @@ class MatchFirstDeclaration : public Declaration {
   }
   auto impl_declarations() -> llvm::ArrayRef<Nonnull<ImplDeclaration*>> {
     return impl_declarations_;
+  }
+
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    return std::vector<Nonnull<const AstNode*>>(impl_declarations_.begin(),
+                                                impl_declarations_.end());
   }
 
  private:
@@ -1042,6 +1188,12 @@ class AliasDeclaration : public Declaration {
   auto resolved_declaration() const
       -> std::optional<Nonnull<const Declaration*>> {
     return resolved_declaration_;
+  }
+
+  // Note: does not return the resolved declaration to avoid circular chains of
+  // children.
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    return {target_};
   }
 
  private:

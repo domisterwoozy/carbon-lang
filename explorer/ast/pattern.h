@@ -17,6 +17,7 @@
 #include "explorer/ast/expression.h"
 #include "explorer/ast/expression_category.h"
 #include "explorer/ast/value_node.h"
+#include "explorer/base/nonnull.h"
 #include "explorer/base/source_location.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
@@ -47,6 +48,8 @@ class Pattern : public AstNode {
 
   void Print(llvm::raw_ostream& out) const override;
   void PrintID(llvm::raw_ostream& out) const override;
+
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override;
 
   static auto classof(const AstNode* node) -> bool {
     return InheritsFromPattern(node->kind());

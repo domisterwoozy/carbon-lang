@@ -31,6 +31,28 @@ class PrintAsID {
 template <typename T>
 PrintAsID(const T&) -> PrintAsID<T>;
 
+// Helper to support printing the tree for a type that has a method
+// `void PrintTree(llvm::raw_ostream& out) const`. Usage:
+//
+//     out << PrintAsTree(obj);
+template <typename T>
+class PrintAsTree {
+ public:
+  explicit PrintAsTree(const T& object) : object_(&object) {}
+
+  friend auto operator<<(llvm::raw_ostream& out, const PrintAsTree& self)
+      -> llvm::raw_ostream& {
+    self.object_->PrintTree(out);
+    return out;
+  }
+
+ private:
+  const T* object_;
+};
+
+template <typename T>
+PrintAsTree(const T&) -> PrintAsTree<T>;
+
 }  // namespace Carbon
 
 #endif  // CARBON_EXPLORER_BASE_PRINT_AS_ID_H_

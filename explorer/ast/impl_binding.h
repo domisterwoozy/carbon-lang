@@ -44,6 +44,10 @@ class ImplBinding : public AstNode {
   void Print(llvm::raw_ostream& out) const override;
   void PrintID(llvm::raw_ostream& out) const override;
 
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    return {};
+  }
+
   // The binding for the type variable.
   auto type_var() const -> Nonnull<const GenericBinding*> { return type_var_; }
   // The constraint being implemented.

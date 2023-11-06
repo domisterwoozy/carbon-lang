@@ -20,6 +20,7 @@
 #include "explorer/ast/paren_contents.h"
 #include "explorer/ast/value_node.h"
 #include "explorer/base/arena.h"
+#include "explorer/base/nonnull.h"
 #include "explorer/base/source_location.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/Support/Compiler.h"
@@ -40,6 +41,10 @@ class Expression : public AstNode {
 
   void Print(llvm::raw_ostream& out) const override;
   void PrintID(llvm::raw_ostream& out) const override;
+
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    return {};
+  }
 
   static auto classof(const AstNode* node) {
     return InheritsFromExpression(node->kind());
@@ -321,6 +326,10 @@ class MemberAccessExpression : public Expression {
     constant_value_ = value;
   }
 
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    return {object_};
+  }
+
  private:
   Nonnull<Expression*> object_;
   bool is_type_access_ = false;
@@ -437,6 +446,13 @@ class CompoundMemberAccessExpression : public MemberAccessExpression {
     member_ = member;
   }
 
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    std::vector<Nonnull<const AstNode*>> children =
+        MemberAccessExpression::children();
+    children.push_back(path_);
+    return children;
+  }
+
  private:
   Nonnull<Expression*> path_;
   std::optional<Nonnull<const MemberName*>> member_;
@@ -464,6 +480,10 @@ class IndexExpression : public Expression {
   auto object() -> Expression& { return *object_; }
   auto offset() const -> const Expression& { return *offset_; }
   auto offset() -> Expression& { return *offset_; }
+
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    return {object_, offset_};
+  }
 
  private:
   Nonnull<Expression*> object_;
@@ -612,6 +632,15 @@ class StructLiteral : public Expression {
   auto fields() const -> llvm::ArrayRef<FieldInitializer> { return fields_; }
   auto fields() -> llvm::MutableArrayRef<FieldInitializer> { return fields_; }
 
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    std::vector<Nonnull<const AstNode*>> children;
+    children.reserve(fields_.size());
+    for (const FieldInitializer& field : fields_) {
+      children.push_back(&field.expression());
+    }
+    return children;
+  }
+
  private:
   std::vector<FieldInitializer> fields_;
 };
@@ -676,6 +705,15 @@ class StructTypeLiteral : public ConstantValueLiteral {
   auto fields() const -> llvm::ArrayRef<FieldInitializer> { return fields_; }
   auto fields() -> llvm::MutableArrayRef<FieldInitializer> { return fields_; }
 
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    std::vector<Nonnull<const AstNode*>> children;
+    children.reserve(fields_.size());
+    for (const FieldInitializer& field : fields_) {
+      children.push_back(&field.expression());
+    }
+    return children;
+  }
+
  private:
   std::vector<FieldInitializer> fields_;
 };
@@ -704,6 +742,10 @@ class OperatorExpression : public RewritableMixin<Expression> {
   }
   auto arguments() -> llvm::MutableArrayRef<Nonnull<Expression*>> {
     return arguments_;
+  }
+
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    return {arguments_.begin(), arguments_.end()};
   }
 
  private:
@@ -756,6 +798,10 @@ class CallExpression : public Expression {
   // Can only be called by type-checking, if a conversion was required.
   void set_argument(Nonnull<Expression*> argument) { argument_ = argument; }
 
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    return {function_, argument_};
+  }
+
  private:
   Nonnull<Expression*> function_;
   Nonnull<Expression*> argument_;
@@ -785,6 +831,10 @@ class FunctionTypeLiteral : public ConstantValueLiteral {
   auto parameter() -> TupleLiteral& { return *parameter_; }
   auto return_type() const -> const Expression& { return *return_type_; }
   auto return_type() -> Expression& { return *return_type_; }
+
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    return {parameter_, return_type_};
+  }
 
  private:
   Nonnull<TupleLiteral*> parameter_;
@@ -901,6 +951,10 @@ class IntrinsicExpression : public RewritableMixin<Expression> {
   auto args() const -> const TupleLiteral& { return *args_; }
   auto args() -> TupleLiteral& { return *args_; }
 
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    return {args_};
+  }
+
  private:
   Intrinsic intrinsic_;
   Nonnull<TupleLiteral*> args_;
@@ -942,6 +996,10 @@ class IfExpression : public Expression {
 
   // Can only be called by type-checking, if a conversion was required.
   void set_condition(Nonnull<Expression*> condition) { condition_ = condition; }
+
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    return {condition_, then_expression_, else_expression_};
+  }
 
  private:
   Nonnull<Expression*> condition_;
@@ -1003,6 +1061,10 @@ class ImplsWhereClause : public WhereClause {
   auto constraint() const -> const Expression& { return *constraint_; }
   auto constraint() -> Expression& { return *constraint_; }
 
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    return {type_, constraint_};
+  }
+
  private:
   Nonnull<Expression*> type_;
   Nonnull<Expression*> constraint_;
@@ -1036,6 +1098,10 @@ class EqualsWhereClause : public WhereClause {
   auto rhs() const -> const Expression& { return *rhs_; }
   auto rhs() -> Expression& { return *rhs_; }
 
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    return {lhs_, rhs_};
+  }
+
  private:
   Nonnull<Expression*> lhs_;
   Nonnull<Expression*> rhs_;
@@ -1068,6 +1134,10 @@ class RewriteWhereClause : public WhereClause {
 
   auto replacement() const -> const Expression& { return *replacement_; }
   auto replacement() -> Expression& { return *replacement_; }
+
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    return {replacement_};
+  }
 
  private:
   std::string member_name_;
@@ -1112,6 +1182,15 @@ class WhereExpression : public RewritableMixin<Expression> {
   }
   auto clauses() -> llvm::ArrayRef<Nonnull<WhereClause*>> { return clauses_; }
 
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    std::vector<Nonnull<const AstNode*>> children{clauses_.begin(),
+                                                  clauses_.end()};
+    // TODO: self binding cannot be added here b/c the definition is incomplete.
+    // I am kind of confused how it can be required in the first place before
+    // name resolution.
+    return children;
+  }
+
  private:
   Nonnull<GenericBinding*> self_binding_;
   std::vector<Nonnull<WhereClause*>> clauses_;
@@ -1143,6 +1222,10 @@ class BuiltinConvertExpression : public RewritableMixin<Expression> {
   }
   auto source_expression() const -> Nonnull<const Expression*> {
     return source_expression_;
+  }
+
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    return {source_expression_};
   }
 
  private:
@@ -1177,8 +1260,9 @@ class UnimplementedExpression : public Expression {
   }
 
   auto label() const -> std::string_view { return label_; }
-  auto children() const -> llvm::ArrayRef<Nonnull<const AstNode*>> {
-    return children_;
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    return std::vector<Nonnull<const AstNode*>>(children_.begin(),
+                                                children_.end());
   }
 
  private:
@@ -1234,6 +1318,14 @@ class ArrayTypeLiteral : public ConstantValueLiteral {
   auto size_expression() -> Expression& {
     CARBON_CHECK(size_expression_.has_value());
     return **size_expression_;
+  }
+
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override {
+    std::vector<Nonnull<const AstNode*>> children{element_type_expression_};
+    if (size_expression_.has_value()) {
+      children.push_back(*size_expression_);
+    }
+    return children;
   }
 
  private:

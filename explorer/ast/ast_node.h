@@ -5,6 +5,8 @@
 #ifndef CARBON_EXPLORER_AST_AST_NODE_H_
 #define CARBON_EXPLORER_AST_AST_NODE_H_
 
+#include <vector>
+
 #include "explorer/ast/ast_rtti.h"
 #include "explorer/base/source_location.h"
 #include "llvm/Support/Casting.h"
@@ -43,9 +45,6 @@ class CloneContext;
 // The cloning constructor should behave like a copy constructor, but pointers
 // to other AST nodes should be passed through context.Clone to clone the
 // referenced object.
-//
-// TODO: To support generic traversal, add children() method, and ensure that
-//   all AstNodes are reachable from a root AstNode.
 class AstNode : public Printable<AstNode> {
  public:
   AstNode(AstNode&&) = delete;
@@ -56,6 +55,11 @@ class AstNode : public Printable<AstNode> {
   virtual void Print(llvm::raw_ostream& out) const = 0;
   // Print identifying information about the node, such as its name.
   virtual void PrintID(llvm::raw_ostream& out) const = 0;
+  // Recursively prints the entire tree rooted at this node.
+  void PrintTree(llvm::raw_ostream& out) const;
+
+  // Returns the direct children of this node in the AST tree.
+  virtual auto children() const -> std::vector<Nonnull<const AstNode*>> = 0;
 
   // Returns an enumerator specifying the concrete type of this node.
   //

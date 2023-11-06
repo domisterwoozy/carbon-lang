@@ -34,6 +34,8 @@ class Statement : public AstNode {
 
   void PrintIndent(int indent_num_spaces, llvm::raw_ostream& out) const;
 
+  auto children() const -> std::vector<Nonnull<const AstNode*>> override;
+
   static auto classof(const AstNode* node) {
     return InheritsFromStatement(node->kind());
   }
