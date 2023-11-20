@@ -6,6 +6,7 @@
 #define CARBON_TOOLCHAIN_DIAGNOSTICS_DIAGNOSTIC_EMITTER_H_
 
 #include <functional>
+#include <optional>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -25,6 +26,7 @@ enum class DiagnosticLevel : int8_t {
   // A note, not indicating an error on its own, but possibly providing context
   // for an error.
   Note,
+  Suggestion,
   // A warning diagnostic, indicating a likely problem with the program.
   Warning,
   // An error diagnostic, indicating that the program is not valid.
@@ -58,28 +60,44 @@ struct DiagnosticLocation {
   int32_t line_number = -1;
   // 1-based column number.
   int32_t column_number = -1;
-  // A location can represent a range of text if set to >1 value.
+  // A location can represent a range of text if length > 1.
   int32_t length = 1;
+};
+
+enum class DiagnosticLocationKind : int8_t {
+  Context,
+  Emphasis,
+  SuggestionAddition,
+  SuggestionRemoval,
 };
 
 // A message composing a diagnostic. This may be the main message, but can also
 // be notes providing more information.
 struct DiagnosticMessage {
   explicit DiagnosticMessage(
-      DiagnosticKind kind, DiagnosticLocation location,
+      DiagnosticKind kind,
+      llvm::SmallVector<std::pair<DiagnosticLocation, DiagnosticLocationKind>>
+          locations,
       llvm::StringLiteral format, llvm::SmallVector<llvm::Any> format_args,
-      std::function<std::string(const DiagnosticMessage&)> format_fn)
+      std::function<std::string(const DiagnosticMessage&)> format_fn,
+      llvm::SmallVector<std::pair<DiagnosticLocation, std::string>>
+          insertion_suggestions)
       : kind(kind),
-        location(location),
+        locations(std::move(locations)),
         format(format),
         format_args(std::move(format_args)),
-        format_fn(std::move(format_fn)) {}
+        format_fn(std::move(format_fn)),
+        insertion_suggestions(std::move(insertion_suggestions)) {}
 
   // The diagnostic's kind.
   DiagnosticKind kind;
 
-  // The calculated location of the diagnostic.
-  DiagnosticLocation location;
+  // The sorted locations referenced by the message. The message can point to
+  // possibly multiple tokens on multiple lines and each reference has an
+  // associated `DiagnosticLocationKind` that describes the relationship between
+  // the location and the diagnostic.
+  llvm::SmallVector<std::pair<DiagnosticLocation, DiagnosticLocationKind>>
+      locations;
 
   // The diagnostic's format string. This, along with format_args, will be
   // passed to format_fn.
@@ -95,6 +113,10 @@ struct DiagnosticMessage {
 
   // Returns the formatted string. By default, this uses llvm::formatv.
   std::function<std::string(const DiagnosticMessage&)> format_fn;
+
+  // Text that we suggest adding to fix the diagnostic.
+  llvm::SmallVector<std::pair<DiagnosticLocation, std::string>>
+      insertion_suggestions;
 };
 
 // An instance of a single error or warning.  Information about the diagnostic
@@ -107,7 +129,9 @@ struct Diagnostic {
   DiagnosticMessage message;
 
   // Notes that add context or supplemental information to the diagnostic.
-  llvm::SmallVector<DiagnosticMessage> notes;
+  std::vector<DiagnosticMessage> notes;
+
+  std::vector<DiagnosticMessage> suggestions;
 };
 
 // Receives diagnostics as they are emitted.
@@ -230,6 +254,21 @@ class DiagnosticEmitter {
       return *this;
     }
 
+    // Adds a note diagnostic attached to the main diagnostic being built.
+    // The API mirrors the main emission API: `DiagnosticEmitter::Emit`.
+    // For the expected usage see the builder API: `DiagnosticEmitter::Build`.
+    template <typename... Args>
+    auto Suggest(LocationT location,
+                 const Internal::DiagnosticBase<Args...>& diagnostic_base,
+                 Internal::NoTypeDeduction<Args>... args)
+        -> DiagnosticBuilder& {
+      CARBON_CHECK(diagnostic_base.Level == DiagnosticLevel::Suggestion)
+          << static_cast<int>(diagnostic_base.Level);
+      diagnostic_.suggestions.push_back(MakeMessage(
+          emitter_, location, diagnostic_base, {llvm::Any(args)...}));
+      return *this;
+    }
+
     // Emits the built diagnostic and its attached notes.
     // For the expected usage see the builder API: `DiagnosticEmitter::Build`.
     template <typename... Args>
@@ -261,12 +300,16 @@ class DiagnosticEmitter {
         DiagnosticEmitter<LocationT>* emitter, LocationT location,
         const Internal::DiagnosticBase<Args...>& diagnostic_base,
         llvm::SmallVector<llvm::Any> args) -> DiagnosticMessage {
+      // TODO: confirm locations are sorted.
       return DiagnosticMessage(
-          diagnostic_base.Kind, emitter->translator_->GetLocation(location),
+          diagnostic_base.Kind,
+          {{emitter->translator_->GetLocation(location),
+            DiagnosticLocationKind::Context}},
           diagnostic_base.Format, std::move(args),
           [&diagnostic_base](const DiagnosticMessage& message) -> std::string {
             return diagnostic_base.FormatFn(message);
-          });
+          },
+          /*TODO insertions*/ {});
     }
 
     DiagnosticEmitter<LocationT>* emitter_;
@@ -358,25 +401,23 @@ class StreamDiagnosticConsumer : public DiagnosticConsumer {
   }
   auto Print(const DiagnosticMessage& message, llvm::StringRef prefix = "")
       -> void {
-    *stream_ << message.location.file_name;
-    if (message.location.line_number > 0) {
-      *stream_ << ":" << message.location.line_number;
-      if (message.location.column_number > 0) {
-        *stream_ << ":" << message.location.column_number;
-      }
-    }
-    *stream_ << ": " << prefix << message.format_fn(message) << "\n";
-    if (message.location.column_number > 0) {
-      *stream_ << message.location.line << "\n";
-      stream_->indent(message.location.column_number - 1);
-      if (message.location.length == 1) {
-        *stream_ << "^";
-      } else {
-        for (int i = 0; i < message.location.length; ++i) {
-          *stream_ << "~";
+    for (const auto& [location, kind] : message.locations) {
+      *stream_ << location.file_name;
+      if (location.line_number > 0) {
+        *stream_ << ":" << location.line_number;
+        if (location.column_number > 0) {
+          *stream_ << ":" << location.column_number;
         }
       }
-      *stream_ << "\n";
+      *stream_ << ": " << prefix << message.format_fn(message) << "\n";
+      if (location.column_number > 0) {
+        *stream_ << location.line << "\n";
+        stream_->indent(location.column_number - 1);
+        for (int i = 0; i < location.length; ++i) {
+          *stream_ << "~";
+        }
+        *stream_ << "\n";
+      }
     }
   }
 
