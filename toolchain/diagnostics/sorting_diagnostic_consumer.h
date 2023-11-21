@@ -33,13 +33,13 @@ class SortingDiagnosticConsumer : public DiagnosticConsumer {
 
   // Sorts and flushes buffered diagnostics.
   void Flush() override {
-    llvm::stable_sort(
-        diagnostics_, [](const Diagnostic& lhs, const Diagnostic& rhs) {
-          return std::tie(lhs.message.locations[0].first.line_number,
-                          lhs.message.locations[0].first.column_number) <
-                 std::tie(rhs.message.locations[0].first.line_number,
-                          rhs.message.locations[0].first.column_number);
-        });
+    llvm::stable_sort(diagnostics_, [](const Diagnostic& lhs,
+                                       const Diagnostic& rhs) {
+      return std::tie(lhs.message.inline_messages[0].location.line_number,
+                      lhs.message.inline_messages[0].location.column_number) <
+             std::tie(rhs.message.inline_messages[0].location.line_number,
+                      rhs.message.inline_messages[0].location.column_number);
+    });
     for (auto& diag : diagnostics_) {
       next_consumer_->HandleDiagnostic(std::move(diag));
     }

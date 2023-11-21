@@ -64,41 +64,16 @@ struct DiagnosticLocation {
   int32_t length = 1;
 };
 
-enum class DiagnosticLocationKind : int8_t {
+enum class InlineDiagnosticKind : int8_t {
+  // Sometimes you want to include a location for contextual purposes only.
   Context,
+  Basic,
   Emphasis,
   SuggestionAddition,
   SuggestionRemoval,
 };
 
-// A message composing a diagnostic. This may be the main message, but can also
-// be notes providing more information.
-struct DiagnosticMessage {
-  explicit DiagnosticMessage(
-      DiagnosticKind kind,
-      llvm::SmallVector<std::pair<DiagnosticLocation, DiagnosticLocationKind>>
-          locations,
-      llvm::StringLiteral format, llvm::SmallVector<llvm::Any> format_args,
-      std::function<std::string(const DiagnosticMessage&)> format_fn,
-      llvm::SmallVector<std::pair<DiagnosticLocation, std::string>>
-          insertion_suggestions)
-      : kind(kind),
-        locations(std::move(locations)),
-        format(format),
-        format_args(std::move(format_args)),
-        format_fn(std::move(format_fn)),
-        insertion_suggestions(std::move(insertion_suggestions)) {}
-
-  // The diagnostic's kind.
-  DiagnosticKind kind;
-
-  // The sorted locations referenced by the message. The message can point to
-  // possibly multiple tokens on multiple lines and each reference has an
-  // associated `DiagnosticLocationKind` that describes the relationship between
-  // the location and the diagnostic.
-  llvm::SmallVector<std::pair<DiagnosticLocation, DiagnosticLocationKind>>
-      locations;
-
+struct DiagnosticText {
   // The diagnostic's format string. This, along with format_args, will be
   // passed to format_fn.
   llvm::StringLiteral format;
@@ -110,13 +85,53 @@ struct DiagnosticMessage {
   // understood that diagnostic formats are subject to change and the llvm::Any
   // offers limited compile-time type safety. Integration tests are required.
   llvm::SmallVector<llvm::Any> format_args;
+};
 
-  // Returns the formatted string. By default, this uses llvm::formatv.
-  std::function<std::string(const DiagnosticMessage&)> format_fn;
+struct InlineDiagnosticMessage {
+  // The location of the inline diagnostic.
+  DiagnosticLocation location;
+  // Represents 'why' we are referencing the location above. Primarily used for
+  // formatting the message.
+  InlineDiagnosticKind kind;
+  // The message associated with the location above. Can be empty if we solely
+  // want to emphasize the location without a specific message.
+  std::optional<DiagnosticText> text;
+};
 
-  // Text that we suggest adding to fix the diagnostic.
+// A message composing a diagnostic. This may be the main message, but can also
+// be notes providing more information.
+struct DiagnosticMessage {
+  explicit DiagnosticMessage(
+      DiagnosticKind kind, llvm::StringLiteral format,
+      llvm::SmallVector<llvm::Any> format_args,
+      std::function<std::string(const DiagnosticText&)> format_fn,
+      llvm::SmallVector<InlineDiagnosticMessage> inline_messages,
+      llvm::SmallVector<std::pair<DiagnosticLocation, std::string>>
+          source_insertions)
+      : kind(kind),
+        primary_text({format, std::move(format_args)}),
+        format_fn(std::move(format_fn)),
+        inline_messages(std::move(inline_messages)),
+        source_insertions(std::move(source_insertions)) {}
+
+  // The diagnostic's kind.
+  DiagnosticKind kind;
+
+  // The top level message for this diagnostic (not associated with any specific
+  // inline tokens).
+  DiagnosticText primary_text;
+
+  // Converts a DiagnosticText into formatted string. Can be used for
+  // primary_text or ineline_messages. By default, this uses llvm::formatv.
+  std::function<std::string(const DiagnosticText&)> format_fn;
+
+  // The inline messages for this diagnostic sorted by the location.
+  llvm::SmallVector<InlineDiagnosticMessage> inline_messages;
+
+  // Text that we insert directly into the source lines when displaying inline
+  // messages.
   llvm::SmallVector<std::pair<DiagnosticLocation, std::string>>
-      insertion_suggestions;
+      source_insertions;
 };
 
 // An instance of a single error or warning.  Information about the diagnostic
@@ -184,7 +199,7 @@ struct DiagnosticBase {
       : Kind(kind), Level(level), Format(format) {}
 
   // Calls formatv with the diagnostic's arguments.
-  auto FormatFn(const DiagnosticMessage& message) const -> std::string {
+  auto FormatFn(const DiagnosticText& message) const -> std::string {
     return FormatFnImpl(message, std::make_index_sequence<sizeof...(Args)>());
   };
 
@@ -201,7 +216,7 @@ struct DiagnosticBase {
   // affects all formatv calls. Consider replacing formatv with a custom call
   // that allows diagnostic-specific formatting.
   template <std::size_t... N>
-  inline auto FormatFnImpl(const DiagnosticMessage& message,
+  inline auto FormatFnImpl(const DiagnosticText& message,
                            std::index_sequence<N...> /*indices*/) const
       -> std::string {
     assert(message.format_args.size() == sizeof...(Args));
@@ -300,15 +315,15 @@ class DiagnosticEmitter {
         DiagnosticEmitter<LocationT>* emitter, LocationT location,
         const Internal::DiagnosticBase<Args...>& diagnostic_base,
         llvm::SmallVector<llvm::Any> args) -> DiagnosticMessage {
-      // TODO: confirm locations are sorted.
       return DiagnosticMessage(
-          diagnostic_base.Kind,
-          {{emitter->translator_->GetLocation(location),
-            DiagnosticLocationKind::Context}},
-          diagnostic_base.Format, std::move(args),
-          [&diagnostic_base](const DiagnosticMessage& message) -> std::string {
-            return diagnostic_base.FormatFn(message);
+          diagnostic_base.Kind, diagnostic_base.Format, std::move(args),
+          [&diagnostic_base](const DiagnosticText& text) -> std::string {
+            return diagnostic_base.FormatFn(text);
           },
+          // TODO: confirm locations are sorted.
+          {{emitter->translator_->GetLocation(location),
+            InlineDiagnosticKind::Basic,
+            DiagnosticText{.format = "temp inline msg"}}},
           /*TODO insertions*/ {});
     }
 
@@ -336,8 +351,8 @@ class DiagnosticEmitter {
         .Emit();
   }
 
-  // A fluent interface for building a diagnostic and attaching notes for added
-  // context or information. For example:
+  // A fluent interface for building a diagnostic and attaching notes for
+  // added context or information. For example:
   //
   //   emitter_.Build(location1, MyDiagnostic)
   //     .Note(location2, MyDiagnosticNote)
@@ -401,23 +416,80 @@ class StreamDiagnosticConsumer : public DiagnosticConsumer {
   }
   auto Print(const DiagnosticMessage& message, llvm::StringRef prefix = "")
       -> void {
-    for (const auto& [location, kind] : message.locations) {
-      *stream_ << location.file_name;
-      if (location.line_number > 0) {
-        *stream_ << ":" << location.line_number;
-        if (location.column_number > 0) {
-          *stream_ << ":" << location.column_number;
-        }
+    *stream_ << prefix << message.format_fn(message.primary_text) << "\n";
+    // Use the required first inline message as the primary messages location.
+    PrintLocation(message.inline_messages[0].location);
+    LineStart(std::nullopt);
+    *stream_ << "\n";
+    // TODO: handle multiple inline msgs on a single line.
+    for (const auto& [location, kind, text] : message.inline_messages) {
+      // Print the actual source line.
+      LineStart(location.line_number);
+      *stream_ << location.line << "\n";
+
+      // Go to the next inline msg if this was simply a contextual line.
+      if (kind == InlineDiagnosticKind::Context ||
+          location.column_number == 0) {
+        continue;
       }
-      *stream_ << ": " << prefix << message.format_fn(message) << "\n";
+
+      // Perform underlining.
+      LineStart(std::nullopt);
+      stream_->indent(location.column_number - 1);
+      for (int i = 0; i < location.length; ++i) {
+        *stream_ << UnderlineType(kind);
+      }
+      *stream_ << "\n";
+
+      // Go to the nexxt inline msg if there is no text to display.
+      if (!text.has_value()) {
+        continue;
+      }
+
+      // Add inline text.
+      LineStart(std::nullopt);
+      stream_->indent(location.column_number - 1 + location.length - 1);
+      // TODO: use the formatting here once we fix the macro.
+      *stream_ << "^-- " << text->format << "\n";
+    }
+    LineStart(std::nullopt);
+    *stream_ << "\n";
+  }
+
+  auto LineStart(std::optional<int> line_number) -> void {
+    if (line_number.has_value()) {
+      *stream_ << line_number.value();
+      // TODO: handle number of digits in the number
+      stream_->indent(2);
+    } else {
+      stream_->indent(3);
+    }
+    *stream_ << "|";
+  }
+
+  auto PrintLocation(const DiagnosticLocation& location) -> void {
+    *stream_ << location.file_name;
+    if (location.line_number > 0) {
+      *stream_ << ":" << location.line_number;
       if (location.column_number > 0) {
-        *stream_ << location.line << "\n";
-        stream_->indent(location.column_number - 1);
-        for (int i = 0; i < location.length; ++i) {
-          *stream_ << "~";
-        }
-        *stream_ << "\n";
+        *stream_ << ":" << location.column_number;
       }
+    }
+    *stream_ << ":\n";
+  }
+
+  auto UnderlineType(InlineDiagnosticKind kind) -> char {
+    switch (kind) {
+      case InlineDiagnosticKind::Context:
+        return ' ';
+      case InlineDiagnosticKind::Basic:
+        return '~';
+      case InlineDiagnosticKind::Emphasis:
+        return '^';
+      case InlineDiagnosticKind::SuggestionAddition:
+        return '+';
+      case InlineDiagnosticKind::SuggestionRemoval:
+        return '-';
     }
   }
 
