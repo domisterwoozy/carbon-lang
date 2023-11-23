@@ -7,9 +7,32 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
+    name = "diagnostic",
+    hdrs = ["diagnostic.h"],
+    deps = [
+        ":diagnostic_kind",
+        "//common:check",
+        "@llvm-project//llvm:Support",
+    ],
+)
+
+cc_library(
+    name = "diagnostic_consumer",
+    hdrs = ["diagnostic_consumer.h"],
+    deps = [
+        ":diagnostic",
+        ":diagnostic_kind",
+        "//common:check",
+        "@llvm-project//llvm:Support",
+    ],
+)
+
+cc_library(
     name = "diagnostic_emitter",
     hdrs = ["diagnostic_emitter.h"],
     deps = [
+        ":diagnostic",
+        ":diagnostic_consumer",
         ":diagnostic_kind",
         "//common:check",
         "@llvm-project//llvm:Support",
@@ -80,6 +103,8 @@ cc_library(
     srcs = ["mocks.cpp"],
     hdrs = ["mocks.h"],
     deps = [
+        ":diagnostic",
+        ":diagnostic_consumer",
         ":diagnostic_emitter",
         "@com_google_googletest//:gtest",
         "@llvm-project//llvm:Support",

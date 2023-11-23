@@ -5,6 +5,7 @@
 #include "toolchain/lex/tokenized_buffer.h"
 
 #include <cmath>
+#include <cstdint>
 
 #include "common/check.h"
 #include "common/string_helpers.h"
@@ -363,7 +364,7 @@ auto TokenizedBuffer::SourceBufferLocationTranslator::GetLocation(
   }
 
   return {.file_name = buffer_->source_->filename(),
-          .line = line,
+          .lines = line,
           .line_number = line_number + 1,
           .column_number = column_number + 1};
 }
@@ -381,7 +382,19 @@ auto TokenLocationTranslator::GetLocation(Token token) -> DiagnosticLocation {
   DiagnosticLocation loc =
       TokenizedBuffer::SourceBufferLocationTranslator(buffer_).GetLocation(
           token_start);
+
+  // Add range information to the location based on the size of the token.
   loc.length = buffer_->GetTokenText(token).size();
+
+  // In case we have a multiline token find the next newline char after the
+  // token.
+  auto end_newline_pos = buffer_->source_->text().find(
+      '\n', line_info.start + token_info.column + loc.length);
+  if (end_newline_pos != llvm::StringRef::npos) {
+    loc.lines = buffer_->source_->text().substr(
+        line_info.start, end_newline_pos - line_info.start);
+  }
+
   return loc;
 }
 
