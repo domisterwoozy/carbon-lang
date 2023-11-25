@@ -592,7 +592,7 @@ class Driver::CompilationUnit {
   llvm::raw_pwrite_stream* vlog_stream_;
 
   // Diagnostics are sent to consumer_, with optional sorting.
-  StreamDiagnosticConsumer stream_consumer_;
+  InlineDiagnosticConsumer stream_consumer_;
   std::optional<SortingDiagnosticConsumer> sorting_consumer_;
   DiagnosticConsumer* consumer_;
 

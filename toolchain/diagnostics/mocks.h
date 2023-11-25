@@ -7,6 +7,7 @@
 
 #include <gmock/gmock.h>
 
+#include "gmock/gmock.h"
 #include "toolchain/diagnostics/diagnostic.h"
 #include "toolchain/diagnostics/diagnostic_consumer.h"
 
@@ -26,26 +27,26 @@ MATCHER_P(IsDiagnosticMessage, matcher, "") {
 
 inline auto IsDiagnostic(testing::Matcher<DiagnosticKind> kind,
                          testing::Matcher<DiagnosticLevel> level,
-                         testing::Matcher<int> /*line_number*/,
-                         testing::Matcher<int> /*column_number*/,
+                         testing::Matcher<int> line_number,
+                         testing::Matcher<int> column_number,
                          testing::Matcher<std::string> message) {
   return testing::AllOf(
       testing::Field("level", &Diagnostic::level, level),
       testing::Field(
           "message", &Diagnostic::message,
           testing::AllOf(
-              testing::Field("kind", &DiagnosticMessage::kind, kind)
-              // TODO: FIX THIS MATCHER
-              //   testing::Field(
-              //       &DiagnosticMessage::inline_messages,
-              //       testing::ElementsAre(testing::AllOf(
-              //           testing::Field("line_number",
-              //                          &DiagnosticLocation::line_number,
-              //                          line_number),
-              //           testing::Field("column_number",
-              //                          &DiagnosticLocation::column_number,
-              //                          column_number)))
-              )),
+              testing::Field("kind", &DiagnosticMessage::kind, kind),
+              testing::Field(
+                  &DiagnosticMessage::primary_location,
+                  testing::Field(
+                      &DiagnosticLocation::position,
+                      testing::AllOf(
+                          testing::Field("line_number",
+                                         &DiagnosticPosition::line_number,
+                                         line_number),
+                          testing::Field("column_number",
+                                         &DiagnosticPosition::column_number,
+                                         column_number)))))),
       IsDiagnosticMessage(message));
 }
 

@@ -7,7 +7,7 @@
 
 #include "common/check.h"
 #include "llvm/ADT/STLExtras.h"
-#include "toolchain/diagnostics/diagnostic_emitter.h"
+#include "toolchain/diagnostics/diagnostic_consumer.h"
 
 namespace Carbon {
 
@@ -33,13 +33,13 @@ class SortingDiagnosticConsumer : public DiagnosticConsumer {
 
   // Sorts and flushes buffered diagnostics.
   void Flush() override {
-    llvm::stable_sort(diagnostics_, [](const Diagnostic& lhs,
-                                       const Diagnostic& rhs) {
-      return std::tie(lhs.message.inline_messages[0].location.line_number,
-                      lhs.message.inline_messages[0].location.column_number) <
-             std::tie(rhs.message.inline_messages[0].location.line_number,
-                      rhs.message.inline_messages[0].location.column_number);
-    });
+    llvm::stable_sort(
+        diagnostics_, [](const Diagnostic& lhs, const Diagnostic& rhs) {
+          return std::tie(lhs.message.primary_location.position.line_number,
+                          lhs.message.primary_location.position.column_number) <
+                 std::tie(rhs.message.primary_location.position.line_number,
+                          rhs.message.primary_location.position.column_number);
+        });
     for (auto& diag : diagnostics_) {
       next_consumer_->HandleDiagnostic(std::move(diag));
     }

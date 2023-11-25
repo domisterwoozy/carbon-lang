@@ -44,6 +44,18 @@ enum class DiagnosticLevel : int8_t {
           ::Carbon::DiagnosticKind::DiagnosticName,           \
           ::Carbon::DiagnosticLevel::Level, Format)
 
+// A diagnostic's location without the associated file or line text.
+struct DiagnosticPosition {
+  // 1-based line number.
+  int32_t line_number = -1;
+  // 1-based column number.
+  int32_t column_number = -1;
+  // A position can represent a range of text if length > 1. If the length
+  // extends past the first line's size, it means we are representing a
+  // multiline range.
+  int32_t length = 1;
+};
+
 // A location for a diagnostic in a file. The lifetime of a DiagnosticLocation
 // is required to be less than SourceBuffer that it refers to due to the
 // contained file_name and line references.
@@ -56,22 +68,14 @@ struct DiagnosticLocation {
   // Name of the file or buffer that this diagnostic refers to.
   llvm::StringRef file_name;
   // A reference to the line(s) where the diagnostic occurs. Always starts at
-  // the beginning of a line and ends with a newline (but can contain multiple
-  // newlines for a multiline range).
+  // the beginning of a line and ends directly before a newline (but can contain
+  // multiple newlines for a multiline range).
   llvm::StringRef lines;
-  // 1-based line number.
-  int32_t line_number = -1;
-  // 1-based column number.
-  int32_t column_number = -1;
-  // A location can represent a range of text if length > 1. If the length
-  // extends past the first line's size, it means we are representing a
-  // multiline range.
-  int32_t length = 1;
+  // The position of the diagnostic within the lines/file contained above.
+  DiagnosticPosition position;
 };
 
 enum class InlineDiagnosticKind : int8_t {
-  // Sometimes you want to include a location for contextual purposes only.
-  Context,
   Basic,
   Emphasis,
   SuggestionAddition,
@@ -93,13 +97,13 @@ struct DiagnosticText {
 };
 
 struct InlineDiagnosticMessage {
-  // The location of the inline diagnostic.
-  DiagnosticLocation location;
-  // Represents 'why' we are referencing the location above. Primarily used for
-  // formatting the message.
+  // The position of the inline diagnostic.
+  DiagnosticPosition location;
+  // Represents 'why' we are referencing the location position. Primarily used
+  // for formatting the message.
   InlineDiagnosticKind kind;
-  // The message associated with the location above. Can be empty if we solely
-  // want to emphasize the location without a specific message.
+  // The message associated with the position above. Can be empty if we solely
+  // want to emphasize the position without a specific message.
   std::optional<DiagnosticText> text;
 };
 
@@ -110,11 +114,13 @@ struct DiagnosticMessage {
       DiagnosticKind kind, llvm::StringLiteral format,
       llvm::SmallVector<llvm::Any> format_args,
       std::function<std::string(const DiagnosticText&)> format_fn,
+      DiagnosticLocation primary_location,
       llvm::SmallVector<InlineDiagnosticMessage> inline_messages,
       llvm::SmallVector<std::pair<DiagnosticLocation, std::string>>
           source_insertions)
       : kind(kind),
         primary_text({format, std::move(format_args)}),
+        primary_location(primary_location),
         format_fn(std::move(format_fn)),
         inline_messages(std::move(inline_messages)),
         source_insertions(std::move(source_insertions)) {}
@@ -126,11 +132,15 @@ struct DiagnosticMessage {
   // inline tokens).
   DiagnosticText primary_text;
 
+  // The location of the diagnostic.
+  DiagnosticLocation primary_location;
+
   // Converts a DiagnosticText into formatted string. Can be used for
   // primary_text or ineline_messages. By default, this uses llvm::formatv.
   std::function<std::string(const DiagnosticText&)> format_fn;
 
-  // The inline messages for this diagnostic sorted by the location.
+  // The inline messages for this diagnostic. The position of each item must be
+  // contained within the diagnostics primary location above.
   llvm::SmallVector<InlineDiagnosticMessage> inline_messages;
 
   // Text that we insert directly into the source lines when displaying inline

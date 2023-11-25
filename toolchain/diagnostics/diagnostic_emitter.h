@@ -32,6 +32,11 @@ class DiagnosticLocationTranslator {
 
   [[nodiscard]] virtual auto GetLocation(LocationT loc)
       -> DiagnosticLocation = 0;
+
+  // TODO: make this pure virtual and force everyone to implement it.
+  [[nodiscard]] virtual auto GetPosition(LocationT loc) -> DiagnosticPosition {
+    return GetLocation(loc).position;
+  }
 };
 
 namespace Internal {
@@ -166,8 +171,9 @@ class DiagnosticEmitter {
           [&diagnostic_base](const DiagnosticText& text) -> std::string {
             return diagnostic_base.FormatFn(text);
           },
+          emitter->translator_->GetLocation(location),
           // TODO: confirm locations are sorted.
-          {{emitter->translator_->GetLocation(location),
+          {{emitter->translator_->GetPosition(location),
             InlineDiagnosticKind::Basic,
             DiagnosticText{.format = "temp inline msg"}}},
           /*TODO insertions*/ {});
