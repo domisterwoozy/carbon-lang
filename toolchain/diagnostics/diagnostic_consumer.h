@@ -250,8 +250,7 @@ class StreamDiagnosticConsumer : public DiagnosticConsumer {
           }
           *stream_ << to_print;
         }
-        *stream_ << "-- " << message.format_fn(printing_msg->msg.text.value())
-                 << "\n";
+        *stream_ << "-- " << printing_msg->msg.text.value() << "\n";
         num_msgs_to_print--;
       }
 

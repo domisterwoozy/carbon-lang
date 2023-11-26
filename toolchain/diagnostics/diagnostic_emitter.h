@@ -120,9 +120,7 @@ class DiagnosticEmitter {
       return *this;
     }
 
-    // Adds a note diagnostic attached to the main diagnostic being built.
-    // The API mirrors the main emission API: `DiagnosticEmitter::Emit`.
-    // For the expected usage see the builder API: `DiagnosticEmitter::Build`.
+    // TODO
     template <typename... Args>
     auto Suggest(LocationT location,
                  const Internal::DiagnosticBase<Args...>& diagnostic_base,
@@ -174,8 +172,7 @@ class DiagnosticEmitter {
           emitter->translator_->GetLocation(location),
           // TODO: confirm locations are sorted.
           {{emitter->translator_->GetPosition(location),
-            InlineDiagnosticKind::Basic,
-            DiagnosticText{.format = "temp inline msg"}}},
+            InlineDiagnosticKind::Basic, "temp inline msg"}},
           /*TODO insertions*/ {});
     }
 

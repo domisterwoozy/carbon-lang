@@ -71,7 +71,8 @@ struct DiagnosticLocation {
   // the beginning of a line and ends directly before a newline (but can contain
   // multiple newlines for a multiline range).
   llvm::StringRef lines;
-  // The position of the diagnostic within the lines/file contained above.
+  // The position of the diagnostic within the lines/file contained above. TODO:
+  // decide if i like this name.
   DiagnosticPosition position;
 };
 
@@ -104,7 +105,7 @@ struct InlineDiagnosticMessage {
   InlineDiagnosticKind kind;
   // The message associated with the position above. Can be empty if we solely
   // want to emphasize the position without a specific message.
-  std::optional<DiagnosticText> text;
+  std::optional<std::string> text;
 };
 
 // A message composing a diagnostic. This may be the main message, but can also
