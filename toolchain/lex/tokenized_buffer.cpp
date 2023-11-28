@@ -28,6 +28,12 @@ auto TokenizedBuffer::GetLine(Token token) const -> Line {
   return GetTokenInfo(token).token_line;
 }
 
+auto TokenizedBuffer::GetEndLine(Token token) const -> Line {
+  llvm::StringRef token_text = GetTokenText(token);
+  int num_newlines = token_text.count('\n');
+  return Line(GetTokenInfo(token).token_line.index + num_newlines);
+}
+
 auto TokenizedBuffer::GetLineNumber(Token token) const -> int {
   return GetLineNumber(GetLine(token));
 }
@@ -89,6 +95,16 @@ auto TokenizedBuffer::GetTokenText(Token token) const -> llvm::StringRef {
 
   CARBON_CHECK(token_info.kind == TokenKind::Identifier) << token_info.kind;
   return value_stores_->identifiers().Get(token_info.ident_id);
+}
+
+auto TokenizedBuffer::GetLineRangeText(Line start_line, Line end_line) const
+    -> llvm::StringRef {
+  CARBON_CHECK(start_line.index <= end_line.index);
+  const auto& start_line_info = GetLineInfo(start_line);
+  const auto& end_line_info = GetLineInfo(end_line);
+  return source_->text().substr(
+      start_line_info.start,
+      end_line_info.start + end_line_info.length - start_line_info.start);
 }
 
 auto TokenizedBuffer::GetIdentifier(Token token) const -> IdentifierId {
@@ -385,15 +401,9 @@ auto TokenLocationTranslator::GetLocation(Token token) -> DiagnosticLocation {
 
   // Add range information to the location based on the size of the token.
   loc.position.length = buffer_->GetTokenText(token).size();
-
-  // In case we have a multiline token find the next newline char after the
-  // token.
-  auto end_newline_pos = buffer_->source_->text().find(
-      '\n', line_info.start + token_info.column + loc.position.length);
-  if (end_newline_pos != llvm::StringRef::npos) {
-    loc.lines = buffer_->source_->text().substr(
-        line_info.start, end_newline_pos - line_info.start);
-  }
+  // Add a range of lines that includes the entirety of the token.
+  loc.lines = buffer_->GetLineRangeText(token_info.token_line,
+                                        buffer_->GetEndLine(token));
 
   return loc;
 }

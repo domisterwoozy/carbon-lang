@@ -102,7 +102,12 @@ cc_fuzz_test(
 cc_library(
     name = "tree_node_location_translator",
     hdrs = ["tree_node_location_translator.h"],
-    deps = [":tree"],
+    deps = [
+        ":tree",
+        "//toolchain/diagnostics:diagnostic",
+        "//toolchain/lex:tokenized_buffer",
+        "@llvm-project//llvm:Support",
+    ],
 )
 
 cc_library(

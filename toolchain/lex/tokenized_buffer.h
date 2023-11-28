@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <iterator>
+#include <utility>
 
 #include "common/ostream.h"
 #include "llvm/ADT/APInt.h"
@@ -134,7 +135,11 @@ class TokenLocationTranslator : public DiagnosticLocationTranslator<Token> {
 class TokenizedBuffer : public Printable<TokenizedBuffer> {
  public:
   [[nodiscard]] auto GetKind(Token token) const -> TokenKind;
+
   [[nodiscard]] auto GetLine(Token token) const -> Line;
+  // Retrieves the line a token ends on (can be different from GetLine in the
+  // case of a multiline token)
+  [[nodiscard]] auto GetEndLine(Token token) const -> Line;
 
   // Returns the 1-based line number.
   [[nodiscard]] auto GetLineNumber(Token token) const -> int;
@@ -144,6 +149,11 @@ class TokenizedBuffer : public Printable<TokenizedBuffer> {
 
   // Returns the source text lexed into this token.
   [[nodiscard]] auto GetTokenText(Token token) const -> llvm::StringRef;
+
+  // Returns the source text from a range of lines. Does not include the final
+  // newline char.
+  [[nodiscard]] auto GetLineRangeText(Line start, Line end) const
+      -> llvm::StringRef;
 
   // Returns the identifier associated with this token. The token kind must be
   // an `Identifier`.

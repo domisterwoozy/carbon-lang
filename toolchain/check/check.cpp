@@ -16,7 +16,7 @@ namespace Carbon::Check {
 struct UnitInfo {
   explicit UnitInfo(Unit& unit)
       : unit(&unit),
-        translator(unit.tokens, unit.parse_tree),
+        translator(unit.tokens, "temp filename", unit.parse_tree),
         err_tracker(*unit.consumer),
         emitter(translator, err_tracker) {}
 

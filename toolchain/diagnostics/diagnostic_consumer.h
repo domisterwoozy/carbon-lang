@@ -65,7 +65,7 @@ class StreamDiagnosticConsumer : public DiagnosticConsumer {
   auto Print(DiagnosticMessage message, llvm::StringRef prefix = "") -> void {
     // If there are inline messages delegate to the new inline message printer.
     if (!message.inline_messages.empty()) {
-      PrintInline(std::move(message), prefix);
+      PrintInline2(std::move(message), prefix);
       return;
     }
 
@@ -131,6 +131,12 @@ class StreamDiagnosticConsumer : public DiagnosticConsumer {
       -> void {
     *stream_ << prefix << message.format_fn(message.primary_text) << "\nat ";
     PrintLocation(message.primary_location);
+
+    // There are three types of lines that are printed when dumping inline
+    // messages.
+    // 1. The source lines.
+    // 2. The underlining lines (always directly below a source line).
+    // 3. The inline text lines (always directly below an underlining line).
 
     // Split the source into lines
     llvm::SmallVector<llvm::StringRef> lines;
@@ -259,14 +265,157 @@ class StreamDiagnosticConsumer : public DiagnosticConsumer {
     }
     LineStart(indent_amt);
     *stream_ << "\n";
+  }
+
+  auto PrintInline2(DiagnosticMessage message, llvm::StringRef prefix = "")
+      -> void {
+    *stream_ << prefix << message.format_fn(message.primary_text) << "\nat ";
+    PrintLocation(message.primary_location);
 
     // There are three types of lines that are printed when dumping inline
     // messages.
     // 1. The source lines.
     // 2. The underlining lines (always directly below a source line).
     // 3. The inline text lines (always directly below an underlining line).
-    // We first construct all of the lines without line numbers so that we know
-    // how many digits we need to prefix each line with.
+
+    // Split the source into lines
+    llvm::SmallVector<llvm::StringRef> lines;
+    message.primary_location.lines.split(lines, '\n', /*MaxSplit=*/-1,
+                                         /*KeepEmpty=*/false);
+    int32_t current_line = message.primary_location.position.line_number;
+    // The indent amount should be able to fit the largest line number plus a
+    // single space.
+    const int indent_amt =
+        std::to_string(current_line + lines.size() - 1).size() + 1;
+
+    llvm::SmallVector<InlineMessagePrintState> to_process;
+    for (InlineDiagnosticMessage& inline_msg : message.inline_messages) {
+      to_process.emplace_back(std::move(inline_msg));
+    }
+    llvm::SmallVector<InlineMessagePrintState> underlining;
+    llvm::SmallVector<InlineMessagePrintState> printing;
+    // TODO: instead of iterating over to_process so many times, lets try using
+    // mutable collections of pointers to to_process for each of the stages
+    // below.
+
+    LineStart(indent_amt);
+    *stream_ << "\n";
+    for (llvm::StringRef source_line : lines) {
+      // First print the current source line.
+      LineStart(indent_amt, std::to_string(current_line));
+      *stream_ << source_line << "\n";
+
+      // Then check if we have new messages to process that start on this line.
+      MoveMessageIf(to_process, underlining, [current_line](const auto& state) {
+        return state.msg.location.line_number == current_line;
+      });
+      if (underlining.empty()) {
+        // If there are no inline messages referring to this line of code, go to
+        // the next source line.
+        ++current_line;
+        continue;
+      }
+
+      // Print underlines for the currently processing msgs.
+      LineStart(indent_amt);
+      for (int32_t col = 1; col <= static_cast<int32_t>(source_line.size());
+           ++col) {
+        // Can only have one underline per column, so we need to determine which
+        // msg will contribute the underline.
+        InlineMessagePrintState* underlining_msg = nullptr;
+        for (InlineMessagePrintState& msg_state : underlining) {
+          int32_t underline_start =
+              msg_state.msg.location.line_number == current_line
+                  ? msg_state.msg.location.column_number
+                  : 0;
+          if (col >= underline_start &&
+              (underlining_msg == nullptr ||
+               // Kind enum is ordered by underline priority.
+               msg_state.msg.kind > underlining_msg->msg.kind)) {
+            underlining_msg = &msg_state;
+          }
+        }
+        if (underlining_msg) {
+          *stream_ << UnderlineType(underlining_msg->msg.kind);
+          --underlining_msg->remaining_underlines;
+          underlining_msg->msg_start_col = col;
+        } else {
+          *stream_ << " ";
+        }
+        // Check if any msgs have finished underlining.
+        MoveMessageIf(underlining, printing, [](const auto& state) {
+          return state.remaining_underlines == 0;
+        });
+      }
+      *stream_ << "\n";
+
+      if (printing.empty()) {
+        // If we didn't finish underlining any msgs, go to the next source line.
+        ++current_line;
+        continue;
+      }
+
+      // Then print inline text for any currently processing msgs that have
+      // finished.
+      while (!printing.empty()) {
+        LineStart(indent_amt);
+        int vert_bars = 0;
+        InlineMessagePrintState* printing_msg = nullptr;
+        for (int32_t col = 1; col <= static_cast<int32_t>(source_line.size());
+             ++col) {
+          // Short circuit if weve printed all vert bars and are ready to print
+          // text.
+          if (printing_msg) {
+            break;
+          }
+          // If an underline finished in this column we want to print a vertical
+          // bar else print an empty space.
+          char to_print = ' ';
+          for (InlineMessagePrintState& state : printing) {
+            if (col == state.msg_start_col) {
+              to_print = '|';
+              vert_bars++;
+              // We are at the final vert bar, so we print the text.
+              if (vert_bars == static_cast<int>(printing.size())) {
+                printing_msg = &state;
+              }
+              break;
+            }
+          }
+          *stream_ << to_print;
+        }
+        *stream_ << "-- " << printing_msg->msg.text.value() << "\n";
+        // TODO DOES THIS WORK?
+        printing.erase(printing_msg);
+      }
+
+      // Go to the next source line.
+      ++current_line;
+    }
+    LineStart(indent_amt);
+    *stream_ << "\n";
+  }
+
+  template <typename P, typename M>
+  auto MoveMessageIf(llvm::SmallVector<InlineMessagePrintState>& from,
+                     llvm::SmallVector<InlineMessagePrintState>& to,
+                     P predicate, M mutate) -> void {
+    for (auto* it = from.begin(); it != from.end();) {
+      if (predicate(*it)) {
+        to.push_back(std::move(*it));
+        mutate(to.back());
+        it = from.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+
+  template <typename P>
+  auto MoveMessageIf(llvm::SmallVector<InlineMessagePrintState>& from,
+                     llvm::SmallVector<InlineMessagePrintState>& to,
+                     P predicate) -> void {
+    MoveMessageIf(from, to, predicate, [](auto) {});
   }
 
   auto LineStart(int indent, std::string line_number = "") -> void {
