@@ -5,9 +5,9 @@
 // AUTOUPDATE
 
 var a: (i32, i32) = (12, 6);
-// CHECK:STDERR: fail_tuple_non_int_indexing.carbon:[[@LINE+3]]:19: ERROR: Tuples indices must be integer literals.
+// CHECK:STDERR: fail_tuple_non_int_indexing.carbon:[[@LINE+3]]:14: ERROR: Tuples indices must be integer literals.
 // CHECK:STDERR: var b: i32 = a[2.6];
-// CHECK:STDERR:                   ^
+// CHECK:STDERR:              ^~~~~~
 var b: i32 = a[2.6];
 
 // CHECK:STDOUT: constants {
@@ -33,7 +33,7 @@ var b: i32 = a[2.6];
 // CHECK:STDOUT:   assign %a.var, %.loc7_27.7
 // CHECK:STDOUT:   %b.var: ref i32 = var b
 // CHECK:STDOUT:   %b: ref i32 = bind_name b, %b.var
-// CHECK:STDOUT:   %a.ref: ref (i32, i32) = name_reference a, %a
+// CHECK:STDOUT:   %a.ref: ref (i32, i32) = name_ref a, %a
 // CHECK:STDOUT:   %.loc11_16: f64 = real_literal 26e-1
 // CHECK:STDOUT:   %.loc11_19: ref <error> = tuple_index %a.ref, <error>
 // CHECK:STDOUT:   assign %b.var, <error>

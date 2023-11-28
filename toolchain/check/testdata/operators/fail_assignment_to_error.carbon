@@ -7,11 +7,11 @@
 fn Main() {
   // CHECK:STDERR: fail_assignment_to_error.carbon:[[@LINE+3]]:3: ERROR: Name `undeclared` not found.
   // CHECK:STDERR:   undeclared = 42;
-  // CHECK:STDERR:   ^
+  // CHECK:STDERR:   ^~~~~~~~~~
   undeclared = 42;
   // CHECK:STDERR: fail_assignment_to_error.carbon:[[@LINE+3]]:4: ERROR: Name `also_undeclared` not found.
   // CHECK:STDERR:   *also_undeclared = 42;
-  // CHECK:STDERR:    ^
+  // CHECK:STDERR:    ^~~~~~~~~~~~~~~
   *also_undeclared = 42;
 }
 
@@ -21,11 +21,11 @@ fn Main() {
 // CHECK:STDOUT:
 // CHECK:STDOUT: fn @Main() {
 // CHECK:STDOUT: !entry:
-// CHECK:STDOUT:   %undeclared.ref: <error> = name_reference undeclared, <error>
+// CHECK:STDOUT:   %undeclared.ref: <error> = name_ref undeclared, <error>
 // CHECK:STDOUT:   %.loc11: i32 = int_literal 42
 // CHECK:STDOUT:   assign %undeclared.ref, <error>
-// CHECK:STDOUT:   %also_undeclared.ref: <error> = name_reference also_undeclared, <error>
-// CHECK:STDOUT:   %.loc15_3: ref <error> = dereference <error>
+// CHECK:STDOUT:   %also_undeclared.ref: <error> = name_ref also_undeclared, <error>
+// CHECK:STDOUT:   %.loc15_3: ref <error> = deref <error>
 // CHECK:STDOUT:   %.loc15_22: i32 = int_literal 42
 // CHECK:STDOUT:   assign %.loc15_3, <error>
 // CHECK:STDOUT:   return

@@ -204,11 +204,6 @@ class File : public Printable<File> {
         .getZExtValue();
   }
 
-  // Returns the requested IR.
-  auto GetCrossReferenceIR(CrossReferenceIRId xref_id) const -> const File& {
-    return *cross_reference_irs_[xref_id.index];
-  }
-
   // Marks a type as complete, and sets its value representation.
   auto CompleteType(TypeId object_type_id,
                     ValueRepresentation value_representation) -> void {
@@ -300,6 +295,12 @@ class File : public Printable<File> {
   }
   auto classes() -> ValueStore<ClassId, Class>& { return classes_; }
   auto classes() const -> const ValueStore<ClassId, Class>& { return classes_; }
+  auto cross_ref_irs() -> ValueStore<CrossRefIRId, const File*>& {
+    return cross_ref_irs_;
+  }
+  auto cross_ref_irs() const -> const ValueStore<CrossRefIRId, const File*>& {
+    return cross_ref_irs_;
+  }
   auto names() const -> NameStoreWrapper {
     return NameStoreWrapper(&identifiers());
   }
@@ -360,7 +361,7 @@ class File : public Printable<File> {
   // Related IRs. There will always be at least 2 entries, the builtin IR (used
   // for references of builtins) followed by the current IR (used for references
   // crossing instruction blocks).
-  llvm::SmallVector<const File*> cross_reference_irs_;
+  ValueStore<CrossRefIRId, const File*> cross_ref_irs_;
 
   // Storage for name scopes.
   NameScopeStore name_scopes_;
@@ -403,11 +404,11 @@ enum class ExprCategory : int8_t {
   Value,
   // This instruction represents a durable reference expression, that denotes an
   // object that outlives the current full expression context.
-  DurableReference,
+  DurableRef,
   // This instruction represents an ephemeral reference expression, that denotes
   // an
   // object that does not outlive the current full expression context.
-  EphemeralReference,
+  EphemeralRef,
   // This instruction represents an initializing expression, that describes how
   // to
   // initialize an object.

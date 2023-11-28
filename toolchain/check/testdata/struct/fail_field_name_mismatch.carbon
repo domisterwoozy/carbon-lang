@@ -4,9 +4,9 @@
 //
 // AUTOUPDATE
 
-// CHECK:STDERR: fail_field_name_mismatch.carbon:[[@LINE+3]]:27: ERROR: Missing value for field `a` in struct initialization.
+// CHECK:STDERR: fail_field_name_mismatch.carbon:[[@LINE+3]]:20: ERROR: Missing value for field `a` in struct initialization.
 // CHECK:STDERR: var x: {.a: i32} = {.b = 1};
-// CHECK:STDERR:                           ^
+// CHECK:STDERR:                    ^~~~~~~~
 var x: {.a: i32} = {.b = 1};
 
 // CHECK:STDERR: fail_field_name_mismatch.carbon:[[@LINE+3]]:20: ERROR: Cannot convert from struct type `{.a: i32}` to `{.b: i32}`: missing field `b` in source type.
@@ -28,6 +28,6 @@ var y: {.b: i32} = x;
 // CHECK:STDOUT:   %.loc15: type = struct_type {.b: i32}
 // CHECK:STDOUT:   %y.var: ref {.b: i32} = var y
 // CHECK:STDOUT:   %y: ref {.b: i32} = bind_name y, %y.var
-// CHECK:STDOUT:   %x.ref: ref {.a: i32} = name_reference x, %x
+// CHECK:STDOUT:   %x.ref: ref {.a: i32} = name_ref x, %x
 // CHECK:STDOUT:   assign %y.var, <error>
 // CHECK:STDOUT: }

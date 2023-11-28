@@ -6,16 +6,28 @@
 
 // --- main.carbon
 
-// CHECK:STDERR: main.carbon:[[@LINE+3]]:1: ERROR: Cannot import `Main` from other packages.
+// CHECK:STDERR: main.carbon:[[@LINE+3]]:1: ERROR: Imports from the current package must omit the package name.
 // CHECK:STDERR: import Main;
-// CHECK:STDERR: ^
+// CHECK:STDERR: ^~~~~~
 import Main;
 
-// --- main_lib.carbon
-
-// CHECK:STDERR: main_lib.carbon:[[@LINE+3]]:1: ERROR: Cannot import `Main` from other packages.
+// CHECK:STDERR: main.carbon:[[@LINE+3]]:1: ERROR: Imports from the current package must omit the package name.
 // CHECK:STDERR: import Main library "lib";
-// CHECK:STDERR: ^
+// CHECK:STDERR: ^~~~~~
+import Main library "lib";
+
+// --- not_main.carbon
+
+package NotMain api;
+
+// CHECK:STDERR: not_main.carbon:[[@LINE+3]]:1: ERROR: Cannot import `Main` from other packages.
+// CHECK:STDERR: import Main;
+// CHECK:STDERR: ^~~~~~
+import Main;
+
+// CHECK:STDERR: not_main.carbon:[[@LINE+3]]:1: ERROR: Cannot import `Main` from other packages.
+// CHECK:STDERR: import Main library "lib";
+// CHECK:STDERR: ^~~~~~
 import Main library "lib";
 
 // --- this.carbon
@@ -24,7 +36,7 @@ package This api;
 
 // CHECK:STDERR: this.carbon:[[@LINE+3]]:1: ERROR: File cannot import itself.
 // CHECK:STDERR: import This;
-// CHECK:STDERR: ^
+// CHECK:STDERR: ^~~~~~
 import This;
 
 // --- this_lib.carbon
@@ -32,80 +44,59 @@ import This;
 package This library "lib" api;
 
 // CHECK:STDERR: this_lib.carbon:[[@LINE+3]]:1: ERROR: File cannot import itself.
-// CHECK:STDERR: import This library "lib";
-// CHECK:STDERR: ^
-import This library "lib";
+// CHECK:STDERR: import library "lib";
+// CHECK:STDERR: ^~~~~~
+import library "lib";
 
 // --- implicit_api.carbon
 
 package Implicit api;
 
-// --- implicit_impl.carbon
+// --- implicit.impl.carbon
 
 package Implicit impl;
 
-// CHECK:STDERR: implicit_impl.carbon:[[@LINE+3]]:1: ERROR: Explicit import of `api` from `impl` file is redundant with implicit import.
+// CHECK:STDERR: implicit.impl.carbon:[[@LINE+3]]:1: ERROR: Explicit import of `api` from `impl` file is redundant with implicit import.
 // CHECK:STDERR: import Implicit;
-// CHECK:STDERR: ^
+// CHECK:STDERR: ^~~~~~
 import Implicit;
 
 // --- implicit_lib_api.carbon
 
 package Implicit library "lib" api;
 
-// --- implicit_lib_impl.carbon
+// --- implicit_lib.impl.carbon
 
 package Implicit library "lib" impl;
 
-// CHECK:STDERR: implicit_lib_impl.carbon:[[@LINE+3]]:1: ERROR: Explicit import of `api` from `impl` file is redundant with implicit import.
+// CHECK:STDERR: implicit_lib.impl.carbon:[[@LINE+3]]:1: ERROR: Explicit import of `api` from `impl` file is redundant with implicit import.
 // CHECK:STDERR: import Implicit library "lib";
-// CHECK:STDERR: ^
+// CHECK:STDERR: ^~~~~~
 import Implicit library "lib";
 
-// --- unknown.carbon
+// --- not_found.carbon
+package NotFound api;
 
-// CHECK:STDERR: unknown.carbon:[[@LINE+3]]:1: ERROR: Imported API not found.
-// CHECK:STDERR: import Unknown;
-// CHECK:STDERR: ^
-import Unknown;
+// CHECK:STDERR: not_found.carbon:[[@LINE+3]]:1: ERROR: Imported API not found.
+// CHECK:STDERR: import ImportNotFound;
+// CHECK:STDERR: ^~~~~~
+import ImportNotFound;
 
 // CHECK:STDOUT: file "main.carbon" {
 // CHECK:STDOUT: }
-// CHECK:STDOUT: constants {
-// CHECK:STDOUT:   %.1: type = ptr_type String
-// CHECK:STDOUT: }
-// CHECK:STDOUT:
-// CHECK:STDOUT: file "main_lib.carbon" {
-// CHECK:STDOUT:   %.loc5: String = string_literal "lib"
+// CHECK:STDOUT: file "not_main.carbon" {
 // CHECK:STDOUT: }
 // CHECK:STDOUT: file "this.carbon" {
 // CHECK:STDOUT: }
-// CHECK:STDOUT: constants {
-// CHECK:STDOUT:   %.1: type = ptr_type String
-// CHECK:STDOUT: }
-// CHECK:STDOUT:
 // CHECK:STDOUT: file "this_lib.carbon" {
-// CHECK:STDOUT:   %.loc2: String = string_literal "lib"
-// CHECK:STDOUT:   %.loc7: String = string_literal "lib"
 // CHECK:STDOUT: }
 // CHECK:STDOUT: file "implicit_api.carbon" {
 // CHECK:STDOUT: }
-// CHECK:STDOUT: file "implicit_impl.carbon" {
+// CHECK:STDOUT: file "implicit.impl.carbon" {
 // CHECK:STDOUT: }
-// CHECK:STDOUT: constants {
-// CHECK:STDOUT:   %.1: type = ptr_type String
-// CHECK:STDOUT: }
-// CHECK:STDOUT:
 // CHECK:STDOUT: file "implicit_lib_api.carbon" {
-// CHECK:STDOUT:   %.loc2: String = string_literal "lib"
 // CHECK:STDOUT: }
-// CHECK:STDOUT: constants {
-// CHECK:STDOUT:   %.1: type = ptr_type String
+// CHECK:STDOUT: file "implicit_lib.impl.carbon" {
 // CHECK:STDOUT: }
-// CHECK:STDOUT:
-// CHECK:STDOUT: file "implicit_lib_impl.carbon" {
-// CHECK:STDOUT:   %.loc2: String = string_literal "lib"
-// CHECK:STDOUT:   %.loc7: String = string_literal "lib"
-// CHECK:STDOUT: }
-// CHECK:STDOUT: file "unknown.carbon" {
+// CHECK:STDOUT: file "not_found.carbon" {
 // CHECK:STDOUT: }

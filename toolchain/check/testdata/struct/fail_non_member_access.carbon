@@ -5,9 +5,9 @@
 // AUTOUPDATE
 
 var x: {.a: i32} = {.a = 4};
-// CHECK:STDERR: fail_non_member_access.carbon:[[@LINE+3]]:15: ERROR: Type `{.a: i32}` does not have a member `b`.
+// CHECK:STDERR: fail_non_member_access.carbon:[[@LINE+3]]:14: ERROR: Type `{.a: i32}` does not have a member `b`.
 // CHECK:STDERR: var y: i32 = x.b;
-// CHECK:STDERR:               ^
+// CHECK:STDERR:              ^~~
 var y: i32 = x.b;
 
 // CHECK:STDOUT: file "fail_non_member_access.carbon" {
@@ -21,6 +21,6 @@ var y: i32 = x.b;
 // CHECK:STDOUT:   assign %x.var, %.loc7_27.3
 // CHECK:STDOUT:   %y.var: ref i32 = var y
 // CHECK:STDOUT:   %y: ref i32 = bind_name y, %y.var
-// CHECK:STDOUT:   %x.ref: ref {.a: i32} = name_reference x, %x
+// CHECK:STDOUT:   %x.ref: ref {.a: i32} = name_ref x, %x
 // CHECK:STDOUT:   assign %y.var, <error>
 // CHECK:STDOUT: }

@@ -7,12 +7,12 @@
 fn G(a: i32) {}
 
 fn F() {
-  // CHECK:STDERR: fail_param_type.carbon:[[@LINE+6]]:4: ERROR: Cannot implicitly convert from `f64` to `i32`.
+  // CHECK:STDERR: fail_param_type.carbon:[[@LINE+6]]:3: ERROR: Cannot implicitly convert from `f64` to `i32`.
   // CHECK:STDERR:   G(1.0);
-  // CHECK:STDERR:    ^
+  // CHECK:STDERR:   ^~
   // CHECK:STDERR: fail_param_type.carbon:[[@LINE-6]]:1: Initializing parameter 1 of function declared here.
   // CHECK:STDERR: fn G(a: i32) {}
-  // CHECK:STDERR: ^
+  // CHECK:STDERR: ^~
   G(1.0);
 }
 
@@ -32,7 +32,7 @@ fn F() {
 // CHECK:STDOUT:
 // CHECK:STDOUT: fn @F() {
 // CHECK:STDOUT: !entry:
-// CHECK:STDOUT:   %G.ref: <function> = name_reference G, file.%G
+// CHECK:STDOUT:   %G.ref: <function> = name_ref G, file.%G
 // CHECK:STDOUT:   %.loc16_5: f64 = real_literal 10e-1
 // CHECK:STDOUT:   %.loc16_4: init () = call %G.ref(<invalid>)
 // CHECK:STDOUT:   return

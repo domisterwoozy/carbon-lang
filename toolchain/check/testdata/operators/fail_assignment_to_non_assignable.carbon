@@ -11,37 +11,37 @@ fn Main() {
   // CHECK:STDERR:   1 = 2;
   // CHECK:STDERR:   ^
   1 = 2;
-  // CHECK:STDERR: fail_assignment_to_non_assignable.carbon:[[@LINE+3]]:5: ERROR: Expression is not assignable.
+  // CHECK:STDERR: fail_assignment_to_non_assignable.carbon:[[@LINE+3]]:3: ERROR: Expression is not assignable.
   // CHECK:STDERR:   F() = 1;
-  // CHECK:STDERR:     ^
+  // CHECK:STDERR:   ^~~
   F() = 1;
-  // CHECK:STDERR: fail_assignment_to_non_assignable.carbon:[[@LINE+3]]:8: ERROR: Expression is not assignable.
+  // CHECK:STDERR: fail_assignment_to_non_assignable.carbon:[[@LINE+3]]:3: ERROR: Expression is not assignable.
   // CHECK:STDERR:   (1, 2) = (3, 4);
-  // CHECK:STDERR:        ^
+  // CHECK:STDERR:   ^~~~~~
   (1, 2) = (3, 4);
   var n: i32 = 0;
-  // CHECK:STDERR: fail_assignment_to_non_assignable.carbon:[[@LINE+3]]:8: ERROR: Expression is not assignable.
+  // CHECK:STDERR: fail_assignment_to_non_assignable.carbon:[[@LINE+3]]:3: ERROR: Expression is not assignable.
   // CHECK:STDERR:   (n, n) = (1, 2);
-  // CHECK:STDERR:        ^
+  // CHECK:STDERR:   ^~~~~~
   (n, n) = (1, 2);
   // CHECK:STDERR: fail_assignment_to_non_assignable.carbon:[[@LINE+3]]:3: ERROR: Expression is not assignable.
   // CHECK:STDERR:   i32 = i32*;
-  // CHECK:STDERR:   ^
+  // CHECK:STDERR:   ^~~
   i32 = i32*;
-  // CHECK:STDERR: fail_assignment_to_non_assignable.carbon:[[@LINE+3]]:18: ERROR: Expression is not assignable.
+  // CHECK:STDERR: fail_assignment_to_non_assignable.carbon:[[@LINE+3]]:3: ERROR: Expression is not assignable.
   // CHECK:STDERR:   {.x = 1, .y = 2} = {.x = 3, .y = 4};
-  // CHECK:STDERR:                  ^
+  // CHECK:STDERR:   ^~~~~~~~~~~~~~~~
   {.x = 1, .y = 2} = {.x = 3, .y = 4};
-  // CHECK:STDERR: fail_assignment_to_non_assignable.carbon:[[@LINE+3]]:25: ERROR: Expression is not assignable.
+  // CHECK:STDERR: fail_assignment_to_non_assignable.carbon:[[@LINE+3]]:3: ERROR: Expression is not assignable.
   // CHECK:STDERR:   (if true then 1 else 2) = 3;
-  // CHECK:STDERR:                         ^
+  // CHECK:STDERR:   ^~~~~~~~~~~~~~~~~~~~~~~
   (if true then 1 else 2) = 3;
 
   // Under #911, if expressions are never reference expressions.
   var a: i32;
-  // CHECK:STDERR: fail_assignment_to_non_assignable.carbon:[[@LINE+3]]:25: ERROR: Expression is not assignable.
+  // CHECK:STDERR: fail_assignment_to_non_assignable.carbon:[[@LINE+3]]:3: ERROR: Expression is not assignable.
   // CHECK:STDERR:   (if true then a else a) = 10;
-  // CHECK:STDERR:                         ^
+  // CHECK:STDERR:   ^~~~~~~~~~~~~~~~~~~~~~~
   (if true then a else a) = 10;
 }
 
@@ -64,7 +64,7 @@ fn Main() {
 // CHECK:STDOUT:   %.loc13_3: i32 = int_literal 1
 // CHECK:STDOUT:   %.loc13_7: i32 = int_literal 2
 // CHECK:STDOUT:   assign %.loc13_3, %.loc13_7
-// CHECK:STDOUT:   %F.ref: <function> = name_reference F, file.%F
+// CHECK:STDOUT:   %F.ref: <function> = name_ref F, file.%F
 // CHECK:STDOUT:   %.loc17_4: init i32 = call %F.ref()
 // CHECK:STDOUT:   %.loc17_9: i32 = int_literal 1
 // CHECK:STDOUT:   assign %.loc17_4, %.loc17_9
@@ -87,8 +87,8 @@ fn Main() {
 // CHECK:STDOUT:   %n: ref i32 = bind_name n, %n.var
 // CHECK:STDOUT:   %.loc22: i32 = int_literal 0
 // CHECK:STDOUT:   assign %n.var, %.loc22
-// CHECK:STDOUT:   %n.ref.loc26_4: ref i32 = name_reference n, %n
-// CHECK:STDOUT:   %n.ref.loc26_7: ref i32 = name_reference n, %n
+// CHECK:STDOUT:   %n.ref.loc26_4: ref i32 = name_ref n, %n
+// CHECK:STDOUT:   %n.ref.loc26_7: ref i32 = name_ref n, %n
 // CHECK:STDOUT:   %.loc26_8.1: (i32, i32) = tuple_literal (%n.ref.loc26_4, %n.ref.loc26_7)
 // CHECK:STDOUT:   %.loc26_13: i32 = int_literal 1
 // CHECK:STDOUT:   %.loc26_16: i32 = int_literal 2
@@ -142,12 +142,12 @@ fn Main() {
 // CHECK:STDOUT:   if %.loc45_7 br !if.expr.then.loc45 else br !if.expr.else.loc45
 // CHECK:STDOUT:
 // CHECK:STDOUT: !if.expr.then.loc45:
-// CHECK:STDOUT:   %a.ref.loc45_17: ref i32 = name_reference a, %a
+// CHECK:STDOUT:   %a.ref.loc45_17: ref i32 = name_ref a, %a
 // CHECK:STDOUT:   %.loc45_17: i32 = bind_value %a.ref.loc45_17
 // CHECK:STDOUT:   br !if.expr.result.loc45(%.loc45_17)
 // CHECK:STDOUT:
 // CHECK:STDOUT: !if.expr.else.loc45:
-// CHECK:STDOUT:   %a.ref.loc45_24: ref i32 = name_reference a, %a
+// CHECK:STDOUT:   %a.ref.loc45_24: ref i32 = name_ref a, %a
 // CHECK:STDOUT:   %.loc45_24: i32 = bind_value %a.ref.loc45_24
 // CHECK:STDOUT:   br !if.expr.result.loc45(%.loc45_24)
 // CHECK:STDOUT:

@@ -17,6 +17,9 @@
 //   - CARBON_PARSE_NODE_KIND_CHILD_COUNT(Name, ChildCount, LexTokenKinds)
 //     Defines a parse node with a set number of children, often 0. This count
 //     must be correct even when the node contains errors.
+//   - CARBON_PARSE_NODE_KIND_TOKEN_LITERAL(Name, Token)
+//     Defines a parse node that corresponds to a token that is a single-token
+//     literal. The token is wrapped for LexTokenKinds.
 //
 //   In both cases, LexTokenKinds says which Lex::TokenKind values that this
 //   parse node can correspond to, and is a sequence of:
@@ -45,6 +48,16 @@
 #ifndef CARBON_PARSE_NODE_KIND_CHILD_COUNT
 #define CARBON_PARSE_NODE_KIND_CHILD_COUNT(Name, ...) \
   CARBON_PARSE_NODE_KIND(Name)
+#endif
+
+// This is expected to be used with something like:
+//
+//   // Use x-macros to handle literal cases.
+//   #define CARBON_PARSE_NODE_KIND(...)
+//   #define CARBON_PARSE_NODE_KIND_TOKEN_LITERAL(Name, ...) <code>
+#ifndef CARBON_PARSE_NODE_KIND_TOKEN_LITERAL
+#define CARBON_PARSE_NODE_KIND_TOKEN_LITERAL(Name, LexTokenKinds) \
+  CARBON_PARSE_NODE_KIND_CHILD_COUNT(Name, 0, LexTokenKinds)
 #endif
 
 // The start of the file.
@@ -95,15 +108,14 @@ CARBON_PARSE_NODE_KIND_CHILD_COUNT(NameExpr, 0, CARBON_TOKEN(Identifier))
 
 // ----------------------------------------------------------------------------
 
-// `library`:
-//   _external_: Literal
-// Library
-CARBON_PARSE_NODE_KIND_CHILD_COUNT(Library, 1, CARBON_TOKEN(Library))
+// The name of a package or library for `package`, `import`, and `library`.
+CARBON_PARSE_NODE_KIND_CHILD_COUNT(PackageName, 0, CARBON_TOKEN(Identifier))
+CARBON_PARSE_NODE_KIND_CHILD_COUNT(LibraryName, 0, CARBON_TOKEN(StringLiteral))
 
 // `package`:
 //   PackageIntroducer
-//   _external_: Name
-//   _optional_ _external_: Library
+//   _optional_ _external_: PackageName
+//   _optional_ _external_: LibrarySpecifier
 //   PackageApi or PackageImpl
 // PackageDirective
 CARBON_PARSE_NODE_KIND_CHILD_COUNT(PackageIntroducer, 0, CARBON_TOKEN(Package))
@@ -115,20 +127,36 @@ CARBON_PARSE_NODE_KIND_BRACKET(PackageDirective, PackageIntroducer,
 
 // `import`:
 //   ImportIntroducer
-//   _external_: Name
-//   _optional_ _external_: Library
+//   _optional_ _external_: PackageName
+//   _optional_ _external_: LibrarySpecifier
 // ImportDirective
 CARBON_PARSE_NODE_KIND_CHILD_COUNT(ImportIntroducer, 0, CARBON_TOKEN(Import))
 CARBON_PARSE_NODE_KIND_BRACKET(ImportDirective, ImportIntroducer,
                                CARBON_TOKEN(Semi)
                                    CARBON_IF_ERROR(CARBON_TOKEN(Import)))
+// `library` as directive:
+//   LibraryIntroducer
+//   DefaultLibrary or _external_: LibraryName
+// LibraryDirective
+CARBON_PARSE_NODE_KIND_CHILD_COUNT(DefaultLibrary, 0, CARBON_TOKEN(Default))
+CARBON_PARSE_NODE_KIND_CHILD_COUNT(LibraryIntroducer, 0, CARBON_TOKEN(Library))
+CARBON_PARSE_NODE_KIND_BRACKET(LibraryDirective, LibraryIntroducer,
+                               CARBON_TOKEN(Semi)
+                                   CARBON_IF_ERROR(CARBON_TOKEN(Library)))
+
+// `library` in `package` or `import`:
+//   _external_: LibraryName
+// LibrarySpecifier
+CARBON_PARSE_NODE_KIND_CHILD_COUNT(LibrarySpecifier, 1, CARBON_TOKEN(Library))
 
 // `namespace`:
 //   NamespaceStart
 //   _external_: Name or QualifiedDecl
 // Namespace
 CARBON_PARSE_NODE_KIND_CHILD_COUNT(NamespaceStart, 0, CARBON_TOKEN(Namespace))
-CARBON_PARSE_NODE_KIND_CHILD_COUNT(Namespace, 2, CARBON_TOKEN(Semi))
+CARBON_PARSE_NODE_KIND_CHILD_COUNT(Namespace, 2,
+                                   CARBON_TOKEN(Semi)
+                                       CARBON_IF_ERROR(CARBON_TOKEN(Namespace)))
 
 // A code block:
 //   CodeBlockStart
@@ -172,15 +200,13 @@ CARBON_PARSE_NODE_KIND_BRACKET(FunctionDecl, FunctionIntroducer,
 //
 // Exprs and ParamListComma may repeat with ParamListComma as a
 // separator.
-CARBON_PARSE_NODE_KIND_CHILD_COUNT(ParamListStart, 0,
-                                   CARBON_TOKEN(OpenParen))
+CARBON_PARSE_NODE_KIND_CHILD_COUNT(ParamListStart, 0, CARBON_TOKEN(OpenParen))
 CARBON_PARSE_NODE_KIND_CHILD_COUNT(ImplicitParamListStart, 0,
                                    CARBON_TOKEN(OpenSquareBracket))
 CARBON_PARSE_NODE_KIND_CHILD_COUNT(ParamListComma, 0, CARBON_TOKEN(Comma))
 CARBON_PARSE_NODE_KIND_BRACKET(ParamList, ParamListStart,
                                CARBON_TOKEN(CloseParen))
-CARBON_PARSE_NODE_KIND_BRACKET(ImplicitParamList,
-                               ImplicitParamListStart,
+CARBON_PARSE_NODE_KIND_BRACKET(ImplicitParamList, ImplicitParamListStart,
                                CARBON_TOKEN(CloseSquareBracket))
 
 // An array type, such as  `[i32; 3]` or `[i32;]`:
@@ -191,9 +217,9 @@ CARBON_PARSE_NODE_KIND_BRACKET(ImplicitParamList,
 // ArrayExpr
 CARBON_PARSE_NODE_KIND_CHILD_COUNT(ArrayExprStart, 0,
                                    CARBON_TOKEN(OpenSquareBracket))
-CARBON_PARSE_NODE_KIND_CHILD_COUNT(
-    ArrayExprSemi, 2,
-    CARBON_TOKEN(Semi) CARBON_IF_ERROR(CARBON_TOKEN(CloseSquareBracket)))
+CARBON_PARSE_NODE_KIND_CHILD_COUNT(ArrayExprSemi, 2,
+                                   CARBON_TOKEN(Semi)
+                                       CARBON_IF_ERROR(CARBON_ANY_TOKEN))
 CARBON_PARSE_NODE_KIND_BRACKET(ArrayExpr, ArrayExprSemi,
                                CARBON_TOKEN(CloseSquareBracket))
 
@@ -398,21 +424,28 @@ CARBON_PARSE_NODE_KIND_CHILD_COUNT(MemberAccessExpr, 2, CARBON_TOKEN(Period))
 CARBON_PARSE_NODE_KIND_CHILD_COUNT(PointerMemberAccessExpr, 2,
                                    CARBON_TOKEN(MinusGreater))
 
-// clang-format off
+// A value literal.
+CARBON_PARSE_NODE_KIND_TOKEN_LITERAL(BoolLiteralFalse, CARBON_TOKEN(False))
+CARBON_PARSE_NODE_KIND_TOKEN_LITERAL(BoolLiteralTrue, CARBON_TOKEN(True))
+CARBON_PARSE_NODE_KIND_TOKEN_LITERAL(IntegerLiteral,
+                                     CARBON_TOKEN(IntegerLiteral))
+CARBON_PARSE_NODE_KIND_TOKEN_LITERAL(FloatingPointLiteral,
+                                     CARBON_TOKEN(RealLiteral))
+CARBON_PARSE_NODE_KIND_TOKEN_LITERAL(StringLiteral, CARBON_TOKEN(StringLiteral))
 
-// A literal.
-CARBON_PARSE_NODE_KIND_CHILD_COUNT(Literal, 0,
-                                   CARBON_TOKEN(False)
-                                   CARBON_TOKEN(True)
-                                   CARBON_TOKEN(IntegerLiteral)
-                                   CARBON_TOKEN(RealLiteral)
-                                   CARBON_TOKEN(StringLiteral)
-                                   CARBON_TOKEN(Bool)
-                                   CARBON_TOKEN(IntegerTypeLiteral)
-                                   CARBON_TOKEN(UnsignedIntegerTypeLiteral)
-                                   CARBON_TOKEN(FloatingPointTypeLiteral)
-                                   CARBON_TOKEN(StringTypeLiteral)
-                                   CARBON_TOKEN(Type))
+// A type literal.
+CARBON_PARSE_NODE_KIND_TOKEN_LITERAL(BoolTypeLiteral, CARBON_TOKEN(Bool))
+CARBON_PARSE_NODE_KIND_TOKEN_LITERAL(IntegerTypeLiteral,
+                                     CARBON_TOKEN(IntegerTypeLiteral))
+CARBON_PARSE_NODE_KIND_TOKEN_LITERAL(UnsignedIntegerTypeLiteral,
+                                     CARBON_TOKEN(UnsignedIntegerTypeLiteral))
+CARBON_PARSE_NODE_KIND_TOKEN_LITERAL(FloatingPointTypeLiteral,
+                                     CARBON_TOKEN(FloatingPointTypeLiteral))
+CARBON_PARSE_NODE_KIND_TOKEN_LITERAL(StringTypeLiteral,
+                                     CARBON_TOKEN(StringTypeLiteral))
+CARBON_PARSE_NODE_KIND_TOKEN_LITERAL(TypeTypeLiteral, CARBON_TOKEN(Type))
+
+// clang-format off
 
 // A prefix operator:
 //   _external_: expression
@@ -609,6 +642,7 @@ CARBON_PARSE_NODE_KIND_CHILD_COUNT(SelfTypeNameExpr, 0,
 #undef CARBON_PARSE_NODE_KIND
 #undef CARBON_PARSE_NODE_KIND_BRACKET
 #undef CARBON_PARSE_NODE_KIND_CHILD_COUNT
+#undef CARBON_PARSE_NODE_KIND_TOKEN_LITERAL
 #undef CARBON_TOKEN
 #undef CARBON_ANY_TOKEN
 #undef CARBON_IF_ERROR

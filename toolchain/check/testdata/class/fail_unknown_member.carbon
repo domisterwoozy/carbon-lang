@@ -10,9 +10,9 @@ class Class {
 
 fn G(c: Class) -> i32 {
   // TODO: Mention the scope in which we looked for the name.
-  // CHECK:STDERR: fail_unknown_member.carbon:[[@LINE+3]]:11: ERROR: Name `something` not found.
+  // CHECK:STDERR: fail_unknown_member.carbon:[[@LINE+3]]:10: ERROR: Name `something` not found.
   // CHECK:STDERR:   return c.something;
-  // CHECK:STDERR:           ^
+  // CHECK:STDERR:          ^~~
   return c.something;
 }
 
@@ -38,7 +38,7 @@ fn G(c: Class) -> i32 {
 // CHECK:STDOUT:
 // CHECK:STDOUT: fn @G(%c: Class) -> i32 {
 // CHECK:STDOUT: !entry:
-// CHECK:STDOUT:   %c.ref: Class = name_reference c, %c
-// CHECK:STDOUT:   %something.ref: <error> = name_reference something, <error>
+// CHECK:STDOUT:   %c.ref: Class = name_ref c, %c
+// CHECK:STDOUT:   %something.ref: <error> = name_ref something, <error>
 // CHECK:STDOUT:   return <error>
 // CHECK:STDOUT: }

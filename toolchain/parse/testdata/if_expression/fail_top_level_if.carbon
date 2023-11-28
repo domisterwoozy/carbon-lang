@@ -7,13 +7,13 @@
 fn F() {
   // CHECK:STDERR: fail_top_level_if.carbon:[[@LINE+9]]:6: ERROR: Expected `(` after `if`.
   // CHECK:STDERR:   if true then 1 else 2;
-  // CHECK:STDERR:      ^
+  // CHECK:STDERR:      ^~~~
   // CHECK:STDERR: fail_top_level_if.carbon:[[@LINE+6]]:11: ERROR: Expected braced code block.
   // CHECK:STDERR:   if true then 1 else 2;
-  // CHECK:STDERR:           ^
+  // CHECK:STDERR:           ^~~~
   // CHECK:STDERR: fail_top_level_if.carbon:[[@LINE+3]]:11: ERROR: Expected expression.
   // CHECK:STDERR:   if true then 1 else 2;
-  // CHECK:STDERR:           ^
+  // CHECK:STDERR:           ^~~~
   if true then 1 else 2;
 }
 
@@ -26,7 +26,7 @@ fn F() {
 // CHECK:STDOUT:         {kind: 'ParamList', text: ')', subtree_size: 2},
 // CHECK:STDOUT:       {kind: 'FunctionDefinitionStart', text: '{', subtree_size: 5},
 // CHECK:STDOUT:           {kind: 'IfConditionStart', text: 'if', has_error: yes},
-// CHECK:STDOUT:           {kind: 'Literal', text: 'true'},
+// CHECK:STDOUT:           {kind: 'BoolLiteralTrue', text: 'true'},
 // CHECK:STDOUT:         {kind: 'IfCondition', text: 'if', has_error: yes, subtree_size: 3},
 // CHECK:STDOUT:           {kind: 'CodeBlockStart', text: 'then', has_error: yes},
 // CHECK:STDOUT:             {kind: 'InvalidParse', text: 'then', has_error: yes},

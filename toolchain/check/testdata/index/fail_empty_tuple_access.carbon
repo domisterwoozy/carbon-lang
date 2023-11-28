@@ -7,9 +7,9 @@
 fn F() {}
 
 fn Run() {
-  // CHECK:STDERR: fail_empty_tuple_access.carbon:[[@LINE+3]]:8: ERROR: Index `0` is past the end of `() as type`.
+  // CHECK:STDERR: fail_empty_tuple_access.carbon:[[@LINE+3]]:3: ERROR: Index `0` is past the end of `() as type`.
   // CHECK:STDERR:   F()[0];
-  // CHECK:STDERR:        ^
+  // CHECK:STDERR:   ^~~~~~
   F()[0];
 }
 
@@ -29,7 +29,7 @@ fn Run() {
 // CHECK:STDOUT:
 // CHECK:STDOUT: fn @Run() {
 // CHECK:STDOUT: !entry:
-// CHECK:STDOUT:   %F.ref: <function> = name_reference F, file.%F
+// CHECK:STDOUT:   %F.ref: <function> = name_ref F, file.%F
 // CHECK:STDOUT:   %.loc13_4.1: init () = call %F.ref()
 // CHECK:STDOUT:   %.loc13_7: i32 = int_literal 0
 // CHECK:STDOUT:   %.loc13_4.2: ref () = temporary_storage

@@ -5,9 +5,9 @@
 // AUTOUPDATE
 
 var x: i32;
-// CHECK:STDERR: fail_qualifier_unsupported.carbon:[[@LINE+3]]:15: ERROR: Type `i32` does not support qualified expressions.
+// CHECK:STDERR: fail_qualifier_unsupported.carbon:[[@LINE+3]]:14: ERROR: Type `i32` does not support qualified expressions.
 // CHECK:STDERR: var y: i32 = x.b;
-// CHECK:STDERR:               ^
+// CHECK:STDERR:              ^~~
 var y: i32 = x.b;
 
 // CHECK:STDOUT: file "fail_qualifier_unsupported.carbon" {
@@ -15,6 +15,6 @@ var y: i32 = x.b;
 // CHECK:STDOUT:   %x: ref i32 = bind_name x, %x.var
 // CHECK:STDOUT:   %y.var: ref i32 = var y
 // CHECK:STDOUT:   %y: ref i32 = bind_name y, %y.var
-// CHECK:STDOUT:   %x.ref: ref i32 = name_reference x, %x
+// CHECK:STDOUT:   %x.ref: ref i32 = name_ref x, %x
 // CHECK:STDOUT:   assign %y.var, <error>
 // CHECK:STDOUT: }

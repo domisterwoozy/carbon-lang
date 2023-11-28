@@ -5,9 +5,9 @@
 // AUTOUPDATE
 
 var a: [i32; 1] = (12,);
-// CHECK:STDERR: fail_array_large_index.carbon:[[@LINE+3]]:35: ERROR: Index `295147905179352825855` is past the end of `[i32; 1]`.
+// CHECK:STDERR: fail_array_large_index.carbon:[[@LINE+3]]:14: ERROR: Index `295147905179352825855` is past the end of `[i32; 1]`.
 // CHECK:STDERR: var b: i32 = a[0xFFFFFFFFFFFFFFFFF];
-// CHECK:STDERR:                                   ^
+// CHECK:STDERR:              ^~~~~~~~~~~~~~~~~~~~~~
 var b: i32 = a[0xFFFFFFFFFFFFFFFFF];
 
 // CHECK:STDOUT: constants {
@@ -30,7 +30,7 @@ var b: i32 = a[0xFFFFFFFFFFFFFFFFF];
 // CHECK:STDOUT:   assign %a.var, %.loc7_23.6
 // CHECK:STDOUT:   %b.var: ref i32 = var b
 // CHECK:STDOUT:   %b: ref i32 = bind_name b, %b.var
-// CHECK:STDOUT:   %a.ref: ref [i32; 1] = name_reference a, %a
+// CHECK:STDOUT:   %a.ref: ref [i32; 1] = name_ref a, %a
 // CHECK:STDOUT:   %.loc11_16: i32 = int_literal 295147905179352825855
 // CHECK:STDOUT:   %.loc11_35.1: ref i32 = array_index %a.ref, <error>
 // CHECK:STDOUT:   %.loc11_35.2: i32 = bind_value %.loc11_35.1
